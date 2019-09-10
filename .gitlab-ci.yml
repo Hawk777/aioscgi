@@ -1,0 +1,32 @@
+"mypy":
+  image:
+    name: "grktsh/mypy:latest"
+    entrypoint: [""]
+  cache:
+    paths:
+      - .mypy_cache/
+    key: "mypy"
+  script:
+    - pip3 install -e .
+    - mypy --strict src
+
+"pycodestyle":
+  image:
+    name: "cytopia/pycodestyle:latest"
+    entrypoint: [""]
+  script:
+    - pycodestyle
+
+"Pylint":
+  image:
+    name: "cytopia/pylint:latest"
+    entrypoint: [""]
+  script:
+    - pip3 install -e .
+    - pylint src tests
+
+"Unit tests":
+  image: "python:3-alpine"
+  script:
+    - pip install -e .
+    - python -m unittest

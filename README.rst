@@ -43,5 +43,5 @@ full details on available options, run ``aioscgi --help``.
 .. _ASGI: https://asgi.readthedocs.io/
 .. _Wikipedia: https://en.wikipedia.org/wiki/Simple_Common_Gateway_Interface
 .. _Python: http://www.python.ca/scgi/
-.. _GitLab: https://gitlab.com/Hawk777/sioscgi
-.. _GitHub: https://github.com/Hawk777/sioscgi
+.. _GitLab: https://gitlab.com/Hawk777/aioscgi
+.. _GitHub: https://github.com/Hawk777/aioscgi

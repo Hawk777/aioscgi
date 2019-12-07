@@ -1,6 +1,6 @@
 "mypy":
   image:
-    name: "hawk7777/mypy:latest"
+    name: "grktsh/mypy:latest"
     entrypoint: [""]
   cache:
     paths:

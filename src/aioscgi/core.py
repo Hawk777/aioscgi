@@ -80,7 +80,7 @@ class LifespanManager:
         """
         event_type = event["type"]
         if event_type not in ("lifespan.startup.complete", "lifespan.startup.failed", "lifespan.shutdown.complete", "lifespan.shutdown.failed"):
-            raise ValueError(f"Unknown event type {event_type}")
+            raise ValueError(f"Unknown event type {event_type!r}")
 
     async def startup(self) -> None:
         """
@@ -109,7 +109,7 @@ class LifespanManager:
                 # The application failed to initialize.
                 raise ApplicationInitializationError(reply.get("message", ""))
             else:
-                raise ValueError(f"Unknown message type {reply_type}")
+                raise ValueError(f"Unknown message type {reply_type!r}")
 
     async def shutdown(self) -> None:
         """
@@ -139,7 +139,7 @@ class LifespanManager:
                     # or otherwise.
                     pass
                 else:
-                    raise ValueError(f"Unknown message type {reply_type}")
+                    raise ValueError(f"Unknown message type {reply_type!r}")
 
 
 def _calc_http_version(server_protocol: str) -> str:
@@ -382,7 +382,7 @@ class _Instance:
             if not event.get("more_body", False):
                 await self._send_event(sioscgi.ResponseEnd(), True)
         else:
-            raise ValueError(f"Unknown event type {event_type} passed to send")
+            raise ValueError(f"Unknown event type {event_type!r} passed to send")
 
     async def _read_chunk(self) -> bytes:
         """

@@ -197,7 +197,7 @@ def _calc_status(status: int) -> str:
     :returns: The status line including the reason phrase.
     """
     try:
-        phrase = http.HTTPStatus(status).phrase  # <https://github.com/PyCQA/pylint/issues/1801> pylint: disable=no-value-for-parameter
+        phrase = http.HTTPStatus(status).phrase  # <https://github.com/PyCQA/pylint/issues/3296> pylint: disable=no-member
     except ValueError:
         phrase = "Unknown Status"
     return f"{status} {phrase}"

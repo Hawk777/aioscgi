@@ -7,7 +7,7 @@
       - .mypy_cache/
     key: "mypy"
   script:
-    - pip3 install -e .
+    - pip3 install --disable-pip-version-check -e .
     - mypy --strict src
 
 "pycodestyle":
@@ -22,11 +22,11 @@
     name: "cytopia/pylint:latest"
     entrypoint: [""]
   script:
-    - pip3 install -e .
+    - pip3 install --disable-pip-version-check -e .
     - pylint src tests
 
 "Unit tests":
   image: "python:3-alpine"
   script:
-    - pip install -e .
+    - pip install --disable-pip-version-check -e .
     - python -m unittest

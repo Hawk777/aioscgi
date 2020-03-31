@@ -44,10 +44,6 @@ class LifespanManager:
     """
     __slots__ = ("_send", "_receive", "_unsupported")
 
-    # _send and _receive cannot be given static types due to
-    # <https://github.com/python/mypy/issues/708>.
-    _unsupported: bool
-
     def __init__(self, send: SendFunction, receive: Callable[[], Awaitable[Optional[EventOrScope]]]):
         """
         Construct a new LifespanManager.
@@ -60,9 +56,9 @@ class LifespanManager:
             an event, then returns that event, or None if the application
             coroutine terminates with an exception.
         """
-        self._send = send
-        self._receive = receive
-        self._unsupported = False
+        self._send: SendFunction = send
+        self._receive: Callable[[], Awaitable[Optional[EventOrScope]]] = receive
+        self._unsupported: bool = False
 
     @property
     def scope(self) -> EventOrScope:
@@ -218,14 +214,6 @@ class _Instance:
         "_response_headers",
         "_response_headers_sent")
 
-    # _application, _read_cb, and _write_cb cannot be given static types due to
-    # <https://github.com/python/mypy/issues/708>.
-    _base_uri: Optional[str]
-    _disconnected: bool
-    _request_ended: bool
-    _conn: sioscgi.SCGIConnection
-    _response_headers: Optional[sioscgi.ResponseHeaders]
-
     def __init__(self, application: ApplicationType, read_cb: Callable[[], Awaitable[bytes]], write_cb: Callable[[bytes, bool], Awaitable[None]], base_uri: Optional[str]):
         """
         Construct a new _Instance.
@@ -237,15 +225,15 @@ class _Instance:
             for computing root_path and path, or None to use SCRIPT_NAME and
             PATH_INFO instead.
         """
-        self._application = application
-        self._read_cb = read_cb
-        self._write_cb = write_cb
-        self._base_uri = base_uri
-        self._disconnected = False
-        self._request_ended = False
-        self._conn = sioscgi.SCGIConnection()
-        self._response_headers = None
-        self._response_headers_sent = False
+        self._application: ApplicationType = application
+        self._read_cb: Callable[[], Awaitable[bytes]] = read_cb
+        self._write_cb: Callable[[bytes, bool], Awaitable[None]] = write_cb
+        self._base_uri: Optional[str] = base_uri
+        self._disconnected: bool = False
+        self._request_ended: bool = False
+        self._conn: sioscgi.SCGIConnection = sioscgi.SCGIConnection()
+        self._response_headers: Optional[sioscgi.ResponseHeaders] = None
+        self._response_headers_sent: bool = False
 
     async def run(self) -> None:
         """
@@ -428,8 +416,6 @@ class Container:
 
     __slots__ = ("_base_uri",)
 
-    _base_uri: Optional[str]
-
     def __init__(self, base_uri: Optional[str]):
         """
         Construct a new ASGI container.
@@ -438,7 +424,7 @@ class Container:
             for computing root_path and path, or None to use SCRIPT_NAME and
             PATH_INFO instead.
         """
-        self._base_uri = base_uri
+        self._base_uri: Optional[str] = base_uri
 
     def run(self, application: ApplicationType, read_cb: Callable[[], Awaitable[bytes]], write_cb: Callable[[bytes, bool], Awaitable[None]]) -> Awaitable[None]:
         """

@@ -185,34 +185,6 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
                     logging.getLogger(__name__).error("Uncaught exception while cancelling task", exc_info=True)
 
 
-def _run(application: core.ApplicationType, start_server_fn: Callable[..., Any], after_listen_cb: Callable[[], None], container: core.Container) -> None:
-    """
-    Run an application listening for SCGI connections.
-
-    :param application: The application callable>
-    :param start_server_fn: Either asyncio.start_server or
-        asyncio.start_unix_server, with server-type-specific parameters bound
-        via functools.partial>
-    :param after_listen_cb: The function to call after the server is up and
-        running, or None if not needed>
-    :param container: The ASGI container to use.
-    """
-    event_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(event_loop)
-    try:
-        event_loop.run_until_complete(_main_coroutine(application, start_server_fn, after_listen_cb, container))
-    finally:
-        logging.getLogger(__name__).debug("Terminating asynchronous generators")
-        try:
-            # Run asynchronous generators’ finally blocks.
-            event_loop.run_until_complete(event_loop.shutdown_asyncgens())
-        finally:
-            logging.getLogger(__name__).debug("Terminating event loop")
-            # Destroy the event loop.
-            asyncio.set_event_loop(None)
-            event_loop.close()
-
-
 def run_tcp(application: core.ApplicationType, hosts: Optional[List[str]], port: int, container: core.Container) -> None:
     """
     Run an application listening for SCGI connections on a TCP port.
@@ -223,7 +195,7 @@ def run_tcp(application: core.ApplicationType, hosts: Optional[List[str]], port:
     :param port: The port number.
     :param container: The ASGI container to use.
     """
-    _run(application, functools.partial(asyncio.start_server, host=hosts, port=port), _do_nothing, container)
+    asyncio.run(_main_coroutine(application, functools.partial(asyncio.start_server, host=hosts, port=port), _do_nothing, container))
 
 
 def run_unix(application: core.ApplicationType, path: str, container: core.Container) -> None:
@@ -240,4 +212,4 @@ def run_unix(application: core.ApplicationType, path: str, container: core.Conta
     :param path: The filename of the socket to listen on.
     :param container: The ASGI container to use.
     """
-    _run(application, functools.partial(asyncio.start_unix_server, path=path), functools.partial(os.chmod, path, 0o666), container)
+    asyncio.run(_main_coroutine(application, functools.partial(asyncio.start_unix_server, path=path), functools.partial(os.chmod, path, 0o666), container))

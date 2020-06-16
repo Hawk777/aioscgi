@@ -67,6 +67,7 @@ async def _connection_wrapper(application: core.ApplicationType, client_connecti
     """
     # Add this task to the set of open client connections.
     task = asyncio.Task.current_task()
+    assert task is not None, "_connection_wrapper must be called inside a task"
     client_connections.add(task)
     try:
         try:

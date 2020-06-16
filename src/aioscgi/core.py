@@ -138,7 +138,7 @@ class LifespanManager:
                     raise ValueError(f"Unknown message type {reply_type!r}")
 
 
-def _calc_http_version(server_protocol: str) -> str:
+def _calc_http_version(server_protocol: bytes) -> str:
     """
     Convert an HTTP_PROTOCOL environment value into an HTTP protocol version
     string.
@@ -146,16 +146,35 @@ def _calc_http_version(server_protocol: str) -> str:
     :param server_protocol: The value of the CGI ``SERVER_PROTOCOL`` variable.
     :returns: The HTTP version in use.
     """
-    server_protocol = server_protocol.upper()
-    if server_protocol.startswith("HTTP/"):
-        return server_protocol[len("HTTP/"):]
-    elif server_protocol == "INCLUDED":
+    server_protocol_str = server_protocol.decode("UTF-8").upper()
+    if server_protocol_str.startswith("HTTP/"):
+        return server_protocol_str[len("HTTP/"):]
+    elif server_protocol == B"INCLUDED":
         return "1.0"
     else:
-        raise ValueError(f"Unrecognized HTTP protocol version {server_protocol}")
+        raise ValueError(f"Unrecognized HTTP protocol version {server_protocol_str}")
 
 
-def _calc_http_headers(environ: Dict[str, str]) -> List[List[bytes]]:
+def _guess_scheme(environ: Dict[str, bytes]) -> str:
+    """
+    Guess the URL scheme (http or https).
+
+    :param environ: The CGI environment dictionary.
+    :returns: The guessed scheme.
+    """
+    # wsgiref.util.guess_scheme will do the work for us, but it requires a
+    # Dict[str, str], not a Dict[str, bytes]. It works by looking for a key
+    # named “HTTPS” and examining its value. Rather than doing the work of
+    # decoding the entire environment dictionary to a Dict[str, str], just
+    # decode only the HTTPS key if present.
+    https = environ.get("HTTPS")
+    if https is None:
+        return "http"
+    else:
+        return wsgiref.util.guess_scheme({"HTTPS": https.decode("ISO-8859-1")})
+
+
+def _calc_http_headers(environ: Dict[str, bytes]) -> List[List[bytes]]:
     """
     Extract the HTTP headers from the environment dictionary.
 
@@ -164,12 +183,12 @@ def _calc_http_headers(environ: Dict[str, str]) -> List[List[bytes]]:
         suitable for passing to an ASGI application.
     """
     return [
-        [k.replace("HTTP_", "", 1).replace("_", "-").lower().encode("ISO-8859-1"), v.encode("ISO-8859-1")]
+        [k.replace("HTTP_", "", 1).replace("_", "-").lower().encode("ISO-8859-1"), v]
         for k, v in environ.items()
         if (k.startswith("HTTP_") and k not in ("HTTP_CONTENT_LENGTH", "HTTP_CONTENT_TYPE")) or k in ("CONTENT_LENGTH", "CONTENT_TYPE")]
 
 
-def _calc_client(environ: Dict[str, str]) -> Optional[List[Any]]:
+def _calc_client(environ: Dict[str, bytes]) -> Optional[List[Any]]:
     """
     Generate the ``client`` key for the ASGI scope.
 
@@ -180,7 +199,11 @@ def _calc_client(environ: Dict[str, str]) -> Optional[List[Any]]:
     addr = environ.get("REMOTE_ADDR")
     port = environ.get("REMOTE_PORT")  # Nonstandard, but may exist
     if addr is not None and port is not None:
-        return [addr, int(port)]
+        try:
+            return [addr.decode("UTF-8"), int(port)]
+        except UnicodeDecodeError:
+            logging.getLogger(__name__).error("REMOTE_ADDR %s is not valid UTF-8", addr)
+            return None
     else:
         return None
 
@@ -240,7 +263,7 @@ class _Instance:
         Run the application.
         """
         # Receive the request line and headers from the SCGI client.
-        environ = None
+        environ: Optional[Dict[str, bytes]] = None
         while environ is None:
             event = self._conn.next_event()
             if event is None:
@@ -268,36 +291,65 @@ class _Instance:
             # remainder of the request URI. This form is useful for HTTP
             # servers that don’t set SCRIPT_NAME and PATH_INFO properly.
             request_uri = environ["REQUEST_URI"]
-            if not request_uri.startswith(self._base_uri):
-                logging.getLogger(__name__).error("Request URI \"%s\" does not start with specified base URI \"%s\"", request_uri, self._base_uri)
+            try:
+                request_uri_str = request_uri.decode("UTF-8")
+            except UnicodeDecodeError:
+                logging.getLogger(__name__).error("REQUEST_URI %s is not valid UTF-8", request_uri)
+                return
+            if not request_uri_str.startswith(self._base_uri):
+                logging.getLogger(__name__).error("REQUEST_URI \"%s\" does not start with specified base URI \"%s\"", request_uri_str, self._base_uri)
                 return
             root_path = self._base_uri
-            path = request_uri[len(root_path):]
+            path = request_uri_str[len(root_path):]
         else:
             # No base path was given. The HTTP server is to be trusted to break
             # down the request into a part designating the application (called
             # SCRIPT_NAME in CGI and root_path in ASGI) and a part designating
             # an entity within the application (called PATH_INFO in CGI and
             # path in ASGI).
-            root_path = environ["SCRIPT_NAME"]
-            path = environ.get("PATH_INFO", "")
+            script_name = environ["SCRIPT_NAME"]
+            try:
+                root_path = script_name.decode("UTF-8")
+            except UnicodeDecodeError:
+                logging.getLogger(__name__).error("SCRIPT_NAME %s is not valid UTF-8", script_name)
+                return
+            path_info = environ.get("PATH_INFO", B"")
+            try:
+                path = path_info.decode("UTF-8")
+            except UnicodeDecodeError:
+                logging.getLogger(__name__).error("PATH_INFO %s is not valid UTF-8", path_info)
+                return
+
+        # UTF-8-decode the REQUEST_METHOD and SERVER_NAME fields.
+        request_method = environ["REQUEST_METHOD"]
+        try:
+            request_method_str = request_method.decode("UTF-8")
+        except UnicodeDecodeError:
+            logging.getLogger(__name__).error("REQUEST_METHOD %s is invalid UTF-8", request_method)
+            return
+        server_name = environ["SERVER_NAME"]
+        try:
+            server_name_str = server_name.decode("UTF-8")
+        except UnicodeDecodeError:
+            logging.getLogger(__name__).error("SERVER_NAME %s is invalid UTF-8", server_name)
+            return
 
         # Build a scope dictionary.
-        scope = {
+        scope: EventOrScope = {
             "type": "http",
             "asgi": {
                 "version": "3.0",
                 "spec_version": "2.1",
             },
             "http_version": _calc_http_version(environ["SERVER_PROTOCOL"]),
-            "method": environ["REQUEST_METHOD"].upper(),
-            "scheme": wsgiref.util.guess_scheme(environ),
+            "method": request_method_str.upper(),
+            "scheme": _guess_scheme(environ),
             "path": path,
-            "query_string": environ["QUERY_STRING"].encode("ISO-8859-1"),
+            "query_string": environ["QUERY_STRING"],
             "root_path": root_path,
             "headers": _calc_http_headers(environ),
             "client": _calc_client(environ),
-            "server": [environ["SERVER_NAME"], int(environ["SERVER_PORT"])],
+            "server": [server_name_str, int(environ["SERVER_PORT"])],
             "extensions": {
                 "environ": environ,
             },

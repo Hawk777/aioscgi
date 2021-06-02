@@ -1,3 +1,9 @@
+Changes in 2.0.1
+================
+
+Python 3.9 is now supported.
+
+
 Changes in 2.0.0
 ================
 

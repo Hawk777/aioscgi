@@ -66,7 +66,8 @@ async def _connection_wrapper(application: core.ApplicationType, client_connecti
     :param writer: The stream writer for the connection.
     """
     # Add this task to the set of open client connections.
-    task = asyncio.Task.current_task()
+    task = asyncio.current_task()
+    assert task is not None, "_connection_wrapper must be called inside a task"
     client_connections.add(task)
     try:
         try:
@@ -172,10 +173,10 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
         logging.getLogger(__name__).debug("Terminating running tasks")
         all_tasks = asyncio.Task.all_tasks(loop)
         for i in all_tasks:
-            if not i.done() and i != asyncio.Task.current_task():
+            if not i.done() and i != asyncio.current_task():
                 i.cancel()
         for i in all_tasks:
-            if not i.done() and i != asyncio.Task.current_task():
+            if not i.done() and i != asyncio.current_task():
                 try:
                     await i
                 except asyncio.CancelledError:

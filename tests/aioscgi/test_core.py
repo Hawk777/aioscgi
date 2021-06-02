@@ -93,6 +93,14 @@ class TestCore(TestCase):
             self.assertEqual(scope["query_string"], B"")
             self.assertEqual(scope["headers"], [])
             self.assertEqual(scope["server"], ["localhost", 80])
+            self.assertEqual(scope["extensions"]["environ"], {
+                "SERVER_PROTOCOL": B"HTTP/1.1",
+                "REQUEST_METHOD": B"GET",
+                "QUERY_STRING": B"",
+                "SCRIPT_NAME": B"",
+                "SERVER_NAME": B"localhost",
+                "SERVER_PORT": B"80",
+            })
 
             message = await receive()
             self.assertEqual(message["type"], "http.request")
@@ -108,12 +116,12 @@ class TestCore(TestCase):
                 "body": B"Hello World!"})
         conn = conn_class.return_value
         headers = sioscgi.RequestHeaders({
-            "SERVER_PROTOCOL": "HTTP/1.1",
-            "REQUEST_METHOD": "GET",
-            "QUERY_STRING": "",
-            "SCRIPT_NAME": "",
-            "SERVER_NAME": "localhost",
-            "SERVER_PORT": "80"})
+            "SERVER_PROTOCOL": B"HTTP/1.1",
+            "REQUEST_METHOD": B"GET",
+            "QUERY_STRING": B"",
+            "SCRIPT_NAME": B"",
+            "SERVER_NAME": B"localhost",
+            "SERVER_PORT": B"80"})
         conn.next_event.side_effect = [headers, sioscgi.RequestEnd()]
         conn.send.return_value = B""
         with self.assertRaises(StopIteration):
@@ -173,13 +181,13 @@ class TestCore(TestCase):
                 "body": B"World!"})
         conn = conn_class.return_value
         headers = sioscgi.RequestHeaders({
-            "SERVER_PROTOCOL": "HTTP/1.1",
-            "REQUEST_METHOD": "GET",
-            "QUERY_STRING": "",
-            "SCRIPT_NAME": "",
-            "SERVER_NAME": "localhost",
-            "SERVER_PORT": "80",
-            "CONTENT_LENGTH": "8"})
+            "SERVER_PROTOCOL": B"HTTP/1.1",
+            "REQUEST_METHOD": B"GET",
+            "QUERY_STRING": B"",
+            "SCRIPT_NAME": B"",
+            "SERVER_NAME": B"localhost",
+            "SERVER_PORT": B"80",
+            "CONTENT_LENGTH": B"8"})
         conn.next_event.side_effect = [headers, sioscgi.RequestBody(B"abcd"), sioscgi.RequestBody(B"efgh"), sioscgi.RequestEnd()]
         conn.send.return_value = B""
         with self.assertRaises(StopIteration):
@@ -225,12 +233,12 @@ class TestCore(TestCase):
 
         conn = conn_class.return_value
         headers = sioscgi.RequestHeaders({
-            "SERVER_PROTOCOL": "HTTP/1.1",
-            "REQUEST_METHOD": "GET",
-            "QUERY_STRING": "",
-            "SCRIPT_NAME": "",
-            "SERVER_NAME": "localhost",
-            "SERVER_PORT": "80"})
+            "SERVER_PROTOCOL": B"HTTP/1.1",
+            "REQUEST_METHOD": B"GET",
+            "QUERY_STRING": B"",
+            "SCRIPT_NAME": B"",
+            "SERVER_NAME": B"localhost",
+            "SERVER_PORT": B"80"})
         conn.next_event.side_effect = [headers, sioscgi.RequestEnd(), None]
         raw_read = conn.raw_read
         raw_read.return_value = B""
@@ -276,13 +284,13 @@ class TestCore(TestCase):
 
         conn = conn_class.return_value
         headers = sioscgi.RequestHeaders({
-            "SERVER_PROTOCOL": "HTTP/1.1",
-            "REQUEST_METHOD": "GET",
-            "QUERY_STRING": "",
-            "SCRIPT_NAME": "",
-            "SERVER_NAME": "localhost",
-            "SERVER_PORT": "80",
-            "CONTENT_LENGTH": "8"})
+            "SERVER_PROTOCOL": B"HTTP/1.1",
+            "REQUEST_METHOD": B"GET",
+            "QUERY_STRING": B"",
+            "SCRIPT_NAME": B"",
+            "SERVER_NAME": B"localhost",
+            "SERVER_PORT": B"80",
+            "CONTENT_LENGTH": B"8"})
         conn.next_event.side_effect = [headers, sioscgi.RequestBody(B"1234"), None]
         raw_read = conn.raw_read
         raw_read.return_value = B""
@@ -299,6 +307,67 @@ class TestCore(TestCase):
             call.next_event(),
             call.raw_read(),
             call.receive_data(B"")])
+
+    @patch("sioscgi.SCGIConnection")
+    def test_https(self, conn_class):
+        """
+        Test that an HTTPS request is recognized as such.
+        """
+        async def app(scope, receive, send):
+            if scope["type"] == "lifespan":
+                raise ValueError("Lifespan protocol not supported by this application")
+
+            self.assertEqual(scope["type"], "http")
+            self.assertEqual(scope["asgi"]["version"], "3.0")
+            self.assertEqual(scope["asgi"]["spec_version"], "2.1")
+            self.assertEqual(scope["http_version"], "1.1")
+            self.assertEqual(scope["method"], "GET")
+            self.assertEqual(scope["scheme"], "https")
+            self.assertEqual(scope["path"], "")
+            self.assertEqual(scope["query_string"], B"")
+            self.assertEqual(scope["headers"], [])
+            self.assertEqual(scope["server"], ["localhost", 80])
+            self.assertEqual(scope["extensions"]["environ"], {
+                "SERVER_PROTOCOL": B"HTTP/1.1",
+                "REQUEST_METHOD": B"GET",
+                "QUERY_STRING": B"",
+                "SCRIPT_NAME": B"",
+                "SERVER_NAME": B"localhost",
+                "SERVER_PORT": B"80",
+                "HTTPS": B"1",
+            })
+
+            message = await receive()
+            self.assertEqual(message["type"], "http.request")
+            self.assertFalse(message.get("body"))
+            self.assertFalse(message.get("more_body"))
+
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"text/plain; charset=UTF-8")]})
+            await send({
+                "type": "http.response.body",
+                "body": B"Hello World!"})
+        conn = conn_class.return_value
+        headers = sioscgi.RequestHeaders({
+            "SERVER_PROTOCOL": B"HTTP/1.1",
+            "REQUEST_METHOD": B"GET",
+            "QUERY_STRING": B"",
+            "SCRIPT_NAME": B"",
+            "SERVER_NAME": B"localhost",
+            "SERVER_PORT": B"80",
+            "HTTPS": B"1"})
+        conn.next_event.side_effect = [headers, sioscgi.RequestEnd()]
+        conn.send.return_value = B""
+        with self.assertRaises(StopIteration):
+            aioscgi.core.Container(None).run(app, None, None).send(None)
+        self.assertEqual(list(conn.mock_calls), [
+            call.next_event(),
+            call.next_event(),
+            call.send(EventMatcher(sioscgi.ResponseHeaders("200 OK", [("Content-Type", "text/plain; charset=UTF-8")]))),
+            call.send(EventMatcher(sioscgi.ResponseBody(B"Hello World!"))),
+            call.send(EventMatcher(sioscgi.ResponseEnd()))])
 
     def test_lifespan_startup_successful(self):
         """

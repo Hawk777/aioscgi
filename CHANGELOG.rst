@@ -1,3 +1,9 @@
+Changes in 2.0.2
+================
+
+Python 3.10 is now supported.
+
+
 Changes in 2.0.1
 ================
 

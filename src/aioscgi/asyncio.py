@@ -171,7 +171,7 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
         # Cancel all the running tasks except myself, thus allowing them to
         # clean up properly.
         logging.getLogger(__name__).debug("Terminating running tasks")
-        all_tasks = asyncio.Task.all_tasks(loop)
+        all_tasks = asyncio.all_tasks(loop)
         for i in all_tasks:
             if not i.done() and i != asyncio.current_task():
                 i.cancel()

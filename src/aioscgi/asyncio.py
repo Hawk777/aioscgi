@@ -144,7 +144,7 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
         try:
             # Start the server and, if provided, run the after listen callback.
             client_connections: Set[asyncio.Task[None]] = set()
-            srv = await start_server_fn(functools.partial(_connection_wrapper, application, client_connections, container), loop=loop)
+            srv = await start_server_fn(functools.partial(_connection_wrapper, application, client_connections, container))
             after_listen_cb()
             logging.getLogger(__name__).info("Server up and running")
 

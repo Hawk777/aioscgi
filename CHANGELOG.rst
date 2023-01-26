@@ -1,3 +1,9 @@
+Changes in 2.0.3
+================
+
+The build system is PEP 517 compliant.
+
+
 Changes in 2.0.2
 ================
 

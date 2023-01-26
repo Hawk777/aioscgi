@@ -22,7 +22,7 @@
     name: "cytopia/pylint:latest"
     entrypoint: [""]
   script:
-    - pip3 install --disable-pip-version-check -e .
+    - python -m pip install --disable-pip-version-check -e .
     - pylint src tests
 
 "Unit tests":

@@ -1,13 +1,13 @@
 "mypy":
   image:
-    name: "hawk7777/mypy:latest"
+    name: "cytopia/mypy:latest"
     entrypoint: [""]
   cache:
     paths:
       - .mypy_cache/
     key: "mypy"
   script:
-    - pip3 install --disable-pip-version-check .
+    - python -m pip install --disable-pip-version-check . types-setuptools
     - mypy --strict src
 
 "pycodestyle":

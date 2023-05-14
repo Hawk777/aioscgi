@@ -4,13 +4,12 @@
 
 import argparse
 import importlib
+import importlib.metadata
 import json
 import logging
 import logging.config
 import pathlib
 import sys
-
-import pkg_resources
 
 from . import core
 
@@ -19,7 +18,7 @@ def main() -> None:
     """The application entry point."""
     try:
         # Discover the available I/O adapters.
-        io_adapters = {entry.name: entry for entry in pkg_resources.iter_entry_points("aioscgi.io")}
+        io_adapters = {entry.name: entry for entry in importlib.metadata.entry_points(group="aioscgi.io")}
 
         # Parse and check command-line parameters.
         parser = argparse.ArgumentParser(description="Run an ASGI application under asyncio.")

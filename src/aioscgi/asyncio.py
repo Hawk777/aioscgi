@@ -51,7 +51,7 @@ async def _lifespan_coro(application: core.ApplicationType, lifespan_manager: co
         await send(None)
 
 
-async def _connection_wrapper(application: core.ApplicationType, client_connections: "set[asyncio.Task[None]]", container: core.Container, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+async def _connection_wrapper(application: core.ApplicationType, client_connections: set[asyncio.Task[None]], container: core.Container, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     """
     Run an ASGI application in an asyncio server.
 

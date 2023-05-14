@@ -1,3 +1,11 @@
+Changes in 2.1.0
+================
+
+CI configuration was updated. Very minor code cleanup was performed. This
+version requires Python 3.10 or higher due to migrating from pkg_resources to
+importlib.metadata for entry points.
+
+
 Changes in 2.0.3
 ================
 

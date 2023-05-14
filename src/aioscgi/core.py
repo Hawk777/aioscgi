@@ -8,16 +8,17 @@ The main entry point is the run function.
 
 import http
 import logging
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
+from collections.abc import Awaitable, Callable
+from typing import Any, Optional, Union
 import wsgiref.util
 
 import sioscgi
 
 
-EventOrScopeValue = Union[bytes, str, int, float, List[Any], Dict[str, Any], bool, None]
+EventOrScopeValue = Union[bytes, str, int, float, list[Any], dict[str, Any], bool, None]
 """The legal types of values in event or scope dictionaries."""
 
-EventOrScope = Dict[str, EventOrScopeValue]
+EventOrScope = dict[str, EventOrScopeValue]
 """The type of an event or scope dictionary."""
 
 ReceiveFunction = Callable[[], Awaitable[EventOrScope]]
@@ -155,7 +156,7 @@ def _calc_http_version(server_protocol: bytes) -> str:
         raise ValueError(f"Unrecognized HTTP protocol version {server_protocol_str}")
 
 
-def _guess_scheme(environ: Dict[str, bytes]) -> str:
+def _guess_scheme(environ: dict[str, bytes]) -> str:
     """
     Guess the URL scheme (http or https).
 
@@ -163,9 +164,9 @@ def _guess_scheme(environ: Dict[str, bytes]) -> str:
     :returns: The guessed scheme.
     """
     # wsgiref.util.guess_scheme will do the work for us, but it requires a
-    # Dict[str, str], not a Dict[str, bytes]. It works by looking for a key
+    # dict[str, str], not a dict[str, bytes]. It works by looking for a key
     # named “HTTPS” and examining its value. Rather than doing the work of
-    # decoding the entire environment dictionary to a Dict[str, str], just
+    # decoding the entire environment dictionary to a dict[str, str], just
     # decode only the HTTPS key if present.
     https = environ.get("HTTPS")
     if https is None:
@@ -174,7 +175,7 @@ def _guess_scheme(environ: Dict[str, bytes]) -> str:
         return wsgiref.util.guess_scheme({"HTTPS": https.decode("ISO-8859-1")})
 
 
-def _calc_http_headers(environ: Dict[str, bytes]) -> List[List[bytes]]:
+def _calc_http_headers(environ: dict[str, bytes]) -> list[list[bytes]]:
     """
     Extract the HTTP headers from the environment dictionary.
 
@@ -188,7 +189,7 @@ def _calc_http_headers(environ: Dict[str, bytes]) -> List[List[bytes]]:
         if (k.startswith("HTTP_") and k not in ("HTTP_CONTENT_LENGTH", "HTTP_CONTENT_TYPE")) or k in ("CONTENT_LENGTH", "CONTENT_TYPE")]
 
 
-def _calc_client(environ: Dict[str, bytes]) -> Optional[List[Any]]:
+def _calc_client(environ: dict[str, bytes]) -> Optional[list[Any]]:
     """
     Generate the ``client`` key for the ASGI scope.
 
@@ -263,7 +264,7 @@ class _Instance:
         Run the application.
         """
         # Receive the request line and headers from the SCGI client.
-        environ: Optional[Dict[str, bytes]] = None
+        environ: Optional[dict[str, bytes]] = None
         while environ is None:
             event = self._conn.next_event()
             if event is None:

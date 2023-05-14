@@ -3,12 +3,13 @@ An I/O adapter connecting aioscgi to the Python standard library asyncio.
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 import functools
 import io
 import logging
 import os
 import signal
-from typing import Any, Awaitable, Callable, List, Optional, Set
+from typing import Any, Optional
 
 from . import core
 
@@ -50,7 +51,7 @@ async def _lifespan_coro(application: core.ApplicationType, lifespan_manager: co
         await send(None)
 
 
-async def _connection_wrapper(application: core.ApplicationType, client_connections: "Set[asyncio.Task[None]]", container: core.Container, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+async def _connection_wrapper(application: core.ApplicationType, client_connections: "set[asyncio.Task[None]]", container: core.Container, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     """
     Run an ASGI application in an asyncio server.
 
@@ -143,7 +144,7 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
 
         try:
             # Start the server and, if provided, run the after listen callback.
-            client_connections: Set[asyncio.Task[None]] = set()
+            client_connections: set[asyncio.Task[None]] = set()
             srv = await start_server_fn(functools.partial(_connection_wrapper, application, client_connections, container))
             after_listen_cb()
             logging.getLogger(__name__).info("Server up and running")
@@ -186,7 +187,7 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
                     logging.getLogger(__name__).error("Uncaught exception while cancelling task", exc_info=True)
 
 
-def run_tcp(application: core.ApplicationType, hosts: Optional[List[str]], port: int, container: core.Container) -> None:
+def run_tcp(application: core.ApplicationType, hosts: Optional[list[str]], port: int, container: core.Container) -> None:
     """
     Run an application listening for SCGI connections on a TCP port.
 

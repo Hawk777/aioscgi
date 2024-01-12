@@ -9,7 +9,6 @@ import io
 import logging
 import os
 import signal
-from typing import Optional
 
 from . import core
 
@@ -23,7 +22,7 @@ def _do_nothing() -> None:
 async def _lifespan_coro(
     application: core.ApplicationType,
     lifespan_manager: core.LifespanManager,
-    send: Callable[[Optional[core.EventOrScope]], Awaitable[None]],
+    send: Callable[[core.EventOrScope | None], Awaitable[None]],
     receive: Callable[[], Awaitable[core.EventOrScope]],
 ) -> None:
     """
@@ -165,7 +164,7 @@ async def _main_coroutine(
 
     # Start up the lifespan protocol.
     lifespan_app_to_framework_queue: asyncio.Queue[
-        Optional[core.EventOrScope]
+        core.EventOrScope | None
     ] = asyncio.Queue()
     lifespan_framework_to_app_queue: asyncio.Queue[core.EventOrScope] = asyncio.Queue()
     lifespan_manager = core.LifespanManager(
@@ -239,7 +238,7 @@ async def _main_coroutine(
 
 def run_tcp(
     application: core.ApplicationType,
-    hosts: Optional[list[str]],
+    hosts: list[str] | None,
     port: int,
     container: core.Container,
 ) -> None:

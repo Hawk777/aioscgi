@@ -23,14 +23,12 @@ def events_equal(event1, event2):
         return False
     elif isinstance(
         event1,
-        (
-            sioscgi.RequestHeaders,
-            sioscgi.RequestBody,
-            sioscgi.RequestEnd,
-            sioscgi.ResponseHeaders,
-            sioscgi.ResponseBody,
-            sioscgi.ResponseEnd,
-        ),
+        sioscgi.RequestHeaders
+        | sioscgi.RequestBody
+        | sioscgi.RequestEnd
+        | sioscgi.ResponseHeaders
+        | sioscgi.ResponseBody
+        | sioscgi.ResponseEnd,
     ):
         slots = event1.__slots__
         if isinstance(slots, str):

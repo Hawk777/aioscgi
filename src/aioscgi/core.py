@@ -9,13 +9,13 @@ The main entry point is the run function.
 import http
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, Optional, Union
+from typing import Any
 import wsgiref.util
 
 import sioscgi
 
 
-EventOrScopeValue = Union[bytes, str, int, float, list[Any], dict[str, Any], bool, None]
+EventOrScopeValue = bytes | str | int | float | list[Any] | dict[str, Any] | bool | None
 """The legal types of values in event or scope dictionaries."""
 
 EventOrScope = dict[str, EventOrScopeValue]
@@ -52,7 +52,7 @@ class LifespanManager:
     def __init__(
         self,
         send: SendFunction,
-        receive: Callable[[], Awaitable[Optional[EventOrScope]]],
+        receive: Callable[[], Awaitable[EventOrScope | None]],
     ):
         """
         Construct a new LifespanManager.
@@ -66,7 +66,7 @@ class LifespanManager:
             coroutine terminates with an exception.
         """
         self._send: SendFunction = send
-        self._receive: Callable[[], Awaitable[Optional[EventOrScope]]] = receive
+        self._receive: Callable[[], Awaitable[EventOrScope | None]] = receive
         self._unsupported: bool = False
 
     @property
@@ -216,7 +216,7 @@ def _calc_http_headers(environ: dict[str, bytes]) -> list[list[bytes]]:
     ]
 
 
-def _calc_client(environ: dict[str, bytes]) -> Optional[list[Any]]:
+def _calc_client(environ: dict[str, bytes]) -> list[Any] | None:
     """
     Generate the ``client`` key for the ASGI scope.
 
@@ -272,7 +272,7 @@ class _Instance:
         application: ApplicationType,
         read_cb: Callable[[], Awaitable[bytes]],
         write_cb: Callable[[bytes, bool], Awaitable[None]],
-        base_uri: Optional[str],
+        base_uri: str | None,
     ):
         """
         Construct a new _Instance.
@@ -287,11 +287,11 @@ class _Instance:
         self._application: ApplicationType = application
         self._read_cb: Callable[[], Awaitable[bytes]] = read_cb
         self._write_cb: Callable[[bytes, bool], Awaitable[None]] = write_cb
-        self._base_uri: Optional[str] = base_uri
+        self._base_uri: str | None = base_uri
         self._disconnected: bool = False
         self._request_ended: bool = False
         self._conn: sioscgi.SCGIConnection = sioscgi.SCGIConnection()
-        self._response_headers: Optional[sioscgi.ResponseHeaders] = None
+        self._response_headers: sioscgi.ResponseHeaders | None = None
         self._response_headers_sent: bool = False
 
     async def run(self) -> None:
@@ -299,7 +299,7 @@ class _Instance:
         Run the application.
         """
         # Receive the request line and headers from the SCGI client.
-        environ: Optional[dict[str, bytes]] = None
+        environ: dict[str, bytes] | None = None
         while environ is None:
             event = self._conn.next_event()
             if event is None:
@@ -442,7 +442,7 @@ class _Instance:
                 return {"type": "http.disconnect"}
             if event is not None:
                 # Translate the event into an ASGI event.
-                assert isinstance(event, (sioscgi.RequestBody, sioscgi.RequestEnd))
+                assert isinstance(event, sioscgi.RequestBody | sioscgi.RequestEnd)
                 if isinstance(event, sioscgi.RequestBody):
                     return {
                         "type": "http.request",
@@ -531,7 +531,7 @@ class Container:
 
     __slots__ = ("_base_uri",)
 
-    def __init__(self, base_uri: Optional[str]):
+    def __init__(self, base_uri: str | None):
         """
         Construct a new ASGI container.
 
@@ -539,7 +539,7 @@ class Container:
             for computing root_path and path, or None to use SCRIPT_NAME and
             PATH_INFO instead.
         """
-        self._base_uri: Optional[str] = base_uri
+        self._base_uri: str | None = base_uri
 
     def run(
         self,

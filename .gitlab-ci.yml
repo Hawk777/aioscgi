@@ -8,7 +8,7 @@
     key: "mypy"
   script:
     - python -m pip install --disable-pip-version-check . types-setuptools
-    - mypy --strict src
+    - mypy --strict src tests
 
 "pycodestyle":
   image:

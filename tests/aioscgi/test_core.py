@@ -2,6 +2,9 @@
 Tests the core module.
 """
 
+from __future__ import annotations
+
+from collections.abc import Coroutine
 from unittest import TestCase
 from unittest.mock import call, MagicMock, patch
 import wsgiref.headers
@@ -9,9 +12,10 @@ import wsgiref.headers
 import sioscgi
 
 import aioscgi.core
+from aioscgi.core import EventOrScope, ReceiveFunction, SendFunction
 
 
-def events_equal(event1, event2):
+def events_equal(event1: sioscgi.Event, event2: object) -> bool:
     """
     Check whether two sioscgi events are deeply equal.
 
@@ -55,7 +59,7 @@ class EventMatcher:
 
     __slots__ = ("_expected",)
 
-    def __init__(self, expected):
+    def __init__(self: EventMatcher, expected: sioscgi.Event) -> None:
         """
         Construct a new matcher.
 
@@ -63,7 +67,7 @@ class EventMatcher:
         """
         self._expected = expected
 
-    def __eq__(self, actual):
+    def __eq__(self: EventMatcher, actual: object) -> bool:
         """
         Compare a given object to the match target.
 
@@ -71,11 +75,34 @@ class EventMatcher:
         """
         return events_equal(self._expected, actual)
 
-    def __str__(self):
+    def __str__(self: EventMatcher) -> str:
         return str(self._expected)
 
-    def __repr__(self):
+    def __repr__(self: EventMatcher) -> str:
         return repr(self._expected)
+
+
+async def _unusable_read_cb() -> bytes:
+    """
+    Fail when called.
+
+    This function can be used as a read callback in tests where the read
+    callback should not be invoked (for example, because the SCGIConnection is
+    mocked to return events immediately without asking for any data).
+    """
+    raise NotImplementedError("This callback should not be called")
+
+
+async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
+    """
+    Fail when called.
+
+    This function can be used as a write callback in tests where the write
+    callback should not be invoked (for example, because the SCGIConnection is
+    mocked to store the pushed events rather than encoding them into bytes and
+    sending them).
+    """
+    raise NotImplementedError("This callback should not be called")
 
 
 class TestCore(TestCase):
@@ -84,16 +111,19 @@ class TestCore(TestCase):
     """
 
     @patch("sioscgi.SCGIConnection")
-    def test_simple(self, conn_class):
+    def test_simple(self: TestCore, conn_class: MagicMock) -> None:
         """
         Test a simple application.
         """
 
-        async def app(scope, receive, send):
+        async def app(
+            scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+        ) -> None:
             if scope["type"] == "lifespan":
                 raise ValueError("Lifespan protocol not supported by this application")
 
             self.assertEqual(scope["type"], "http")
+            assert isinstance(scope["asgi"], dict)
             self.assertEqual(scope["asgi"]["version"], "3.0")
             self.assertEqual(scope["asgi"]["spec_version"], "2.1")
             self.assertEqual(scope["http_version"], "1.1")
@@ -103,6 +133,7 @@ class TestCore(TestCase):
             self.assertEqual(scope["query_string"], b"")
             self.assertEqual(scope["headers"], [])
             self.assertEqual(scope["server"], ["localhost", 80])
+            assert isinstance(scope["extensions"], dict)
             self.assertEqual(
                 scope["extensions"]["environ"],
                 {
@@ -143,7 +174,11 @@ class TestCore(TestCase):
         conn.next_event.side_effect = [headers, sioscgi.RequestEnd()]
         conn.send.return_value = b""
         with self.assertRaises(StopIteration):
-            aioscgi.core.Container(None).run(app, None, None).send(None)
+            coro = aioscgi.core.Container(None).run(
+                app, _unusable_read_cb, _unusable_write_cb
+            )
+            assert isinstance(coro, Coroutine)
+            coro.send(None)
         self.assertEqual(
             list(conn.mock_calls),
             [
@@ -162,16 +197,19 @@ class TestCore(TestCase):
         )
 
     @patch("sioscgi.SCGIConnection")
-    def test_multi_body(self, conn_class):
+    def test_multi_body(self: TestCore, conn_class: MagicMock) -> None:
         """
         Test request and response bodies transported in multiple parts.
         """
 
-        async def app(scope, receive, send):
+        async def app(
+            scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+        ) -> None:
             if scope["type"] == "lifespan":
                 raise ValueError("Lifespan protocol not supported by this application")
 
             self.assertEqual(scope["type"], "http")
+            assert isinstance(scope["asgi"], dict)
             self.assertEqual(scope["asgi"]["version"], "3.0")
             self.assertEqual(scope["asgi"]["spec_version"], "2.1")
             self.assertEqual(scope["http_version"], "1.1")
@@ -232,7 +270,11 @@ class TestCore(TestCase):
         ]
         conn.send.return_value = b""
         with self.assertRaises(StopIteration):
-            aioscgi.core.Container(None).run(app, None, None).send(None)
+            coro = aioscgi.core.Container(None).run(
+                app, _unusable_read_cb, _unusable_write_cb
+            )
+            assert isinstance(coro, Coroutine)
+            coro.send(None)
         self.assertEqual(
             list(conn.mock_calls),
             [
@@ -258,17 +300,20 @@ class TestCore(TestCase):
         )
 
     @patch("sioscgi.SCGIConnection")
-    def test_disconnect_after_request(self, conn_class):
+    def test_disconnect_after_request(self: TestCore, conn_class: MagicMock) -> None:
         """
         Test a long polling type of application where the client disconnects
         before the response body is sent.
         """
 
-        async def app(scope, receive, _):
+        async def app(
+            scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
+        ) -> None:
             if scope["type"] == "lifespan":
                 raise ValueError("Lifespan protocol not supported by this application")
 
             self.assertEqual(scope["type"], "http")
+            assert isinstance(scope["asgi"], dict)
             self.assertEqual(scope["asgi"]["version"], "3.0")
             self.assertEqual(scope["asgi"]["spec_version"], "2.1")
             self.assertEqual(scope["http_version"], "1.1")
@@ -302,28 +347,37 @@ class TestCore(TestCase):
         raw_read = conn.raw_read
         raw_read.return_value = b""
 
-        async def raw_read_wrapper():
-            return raw_read()
+        async def raw_read_wrapper() -> bytes:
+            ret = raw_read()
+            assert isinstance(ret, bytes)
+            return ret
 
         conn.send.return_value = b""
         with self.assertRaises(StopIteration):
-            aioscgi.core.Container(None).run(app, raw_read_wrapper, None).send(None)
+            coro = aioscgi.core.Container(None).run(
+                app, raw_read_wrapper, _unusable_write_cb
+            )
+            assert isinstance(coro, Coroutine)
+            coro.send(None)
         self.assertEqual(
             list(conn.mock_calls),
             [call.next_event(), call.next_event(), call.raw_read()],
         )
 
     @patch("sioscgi.SCGIConnection")
-    def test_disconnect_during_request(self, conn_class):
+    def test_disconnect_during_request(self: TestCore, conn_class: MagicMock) -> None:
         """
         Test a case where the client disconnects while sending the request.
         """
 
-        async def app(scope, receive, _):
+        async def app(
+            scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
+        ) -> None:
             if scope["type"] == "lifespan":
                 raise ValueError("Lifespan protocol not supported by this application")
 
             self.assertEqual(scope["type"], "http")
+            assert isinstance(scope["asgi"], dict)
             self.assertEqual(scope["asgi"]["version"], "3.0")
             self.assertEqual(scope["asgi"]["spec_version"], "2.1")
             self.assertEqual(scope["http_version"], "1.1")
@@ -358,12 +412,18 @@ class TestCore(TestCase):
         raw_read = conn.raw_read
         raw_read.return_value = b""
 
-        async def raw_read_wrapper():
-            return raw_read()
+        async def raw_read_wrapper() -> bytes:
+            ret = raw_read()
+            assert isinstance(ret, bytes)
+            return ret
 
         conn.send.return_value = b""
         with self.assertRaises(StopIteration):
-            aioscgi.core.Container(None).run(app, raw_read_wrapper, None).send(None)
+            coro = aioscgi.core.Container(None).run(
+                app, raw_read_wrapper, _unusable_write_cb
+            )
+            assert isinstance(coro, Coroutine)
+            coro.send(None)
         self.assertEqual(
             list(conn.mock_calls),
             [
@@ -376,16 +436,19 @@ class TestCore(TestCase):
         )
 
     @patch("sioscgi.SCGIConnection")
-    def test_https(self, conn_class):
+    def test_https(self: TestCore, conn_class: MagicMock) -> None:
         """
         Test that an HTTPS request is recognized as such.
         """
 
-        async def app(scope, receive, send):
+        async def app(
+            scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+        ) -> None:
             if scope["type"] == "lifespan":
                 raise ValueError("Lifespan protocol not supported by this application")
 
             self.assertEqual(scope["type"], "http")
+            assert isinstance(scope["asgi"], dict)
             self.assertEqual(scope["asgi"]["version"], "3.0")
             self.assertEqual(scope["asgi"]["spec_version"], "2.1")
             self.assertEqual(scope["http_version"], "1.1")
@@ -395,6 +458,7 @@ class TestCore(TestCase):
             self.assertEqual(scope["query_string"], b"")
             self.assertEqual(scope["headers"], [])
             self.assertEqual(scope["server"], ["localhost", 80])
+            assert isinstance(scope["extensions"], dict)
             self.assertEqual(
                 scope["extensions"]["environ"],
                 {
@@ -437,7 +501,11 @@ class TestCore(TestCase):
         conn.next_event.side_effect = [headers, sioscgi.RequestEnd()]
         conn.send.return_value = b""
         with self.assertRaises(StopIteration):
-            aioscgi.core.Container(None).run(app, None, None).send(None)
+            coro = aioscgi.core.Container(None).run(
+                app, _unusable_read_cb, _unusable_write_cb
+            )
+            assert isinstance(coro, Coroutine)
+            coro.send(None)
         self.assertEqual(
             list(conn.mock_calls),
             [
@@ -455,7 +523,7 @@ class TestCore(TestCase):
             ],
         )
 
-    def test_lifespan_startup_successful(self):
+    def test_lifespan_startup_successful(self: TestCore) -> None:
         """
         Test that the lifespan protocol startup events work right for an
         application that supports the protocol and initializes successfully.
@@ -465,11 +533,13 @@ class TestCore(TestCase):
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [{"type": "lifespan.startup.complete"}]
 
-        async def send(event):
+        async def send(event: EventOrScope) -> None:
             mock_queue.send(event)
 
-        async def receive():
-            return mock_queue.receive()
+        async def receive() -> EventOrScope | None:
+            ret = mock_queue.receive()
+            assert isinstance(ret, dict)
+            return ret
 
         # Create the lifespan manager.
         uut = aioscgi.core.LifespanManager(send, receive)
@@ -489,7 +559,7 @@ class TestCore(TestCase):
             [call.send({"type": "lifespan.startup"}), call.receive()],
         )
 
-    def test_lifespan_startup_failed(self):
+    def test_lifespan_startup_failed(self: TestCore) -> None:
         """
         Test that the lifespan protocol startup events work right for an
         application that supports the protocol but fails to initialize.
@@ -504,11 +574,13 @@ class TestCore(TestCase):
             }
         ]
 
-        async def send(event):
+        async def send(event: EventOrScope) -> None:
             mock_queue.send(event)
 
-        async def receive():
-            return mock_queue.receive()
+        async def receive() -> EventOrScope | None:
+            ret = mock_queue.receive()
+            assert isinstance(ret, dict)
+            return ret
 
         # Create the lifespan manager.
         uut = aioscgi.core.LifespanManager(send, receive)
@@ -532,7 +604,7 @@ class TestCore(TestCase):
             [call.send({"type": "lifespan.startup"}), call.receive()],
         )
 
-    def test_lifespan_shutdown_successful(self):
+    def test_lifespan_shutdown_successful(self: TestCore) -> None:
         """
         Test that the lifespan protocol shutdown events work right for an
         application that supports the protocol and shuts down successfully.
@@ -542,11 +614,13 @@ class TestCore(TestCase):
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [{"type": "lifespan.shutdown.complete"}]
 
-        async def send(event):
+        async def send(event: EventOrScope) -> None:
             mock_queue.send(event)
 
-        async def receive():
-            return mock_queue.receive()
+        async def receive() -> EventOrScope | None:
+            ret = mock_queue.receive()
+            assert isinstance(ret, dict)
+            return ret
 
         # Create the lifespan manager.
         uut = aioscgi.core.LifespanManager(send, receive)
@@ -566,7 +640,7 @@ class TestCore(TestCase):
             [call.send({"type": "lifespan.shutdown"}), call.receive()],
         )
 
-    def test_lifespan_shutdown_failed(self):
+    def test_lifespan_shutdown_failed(self: TestCore) -> None:
         """
         Test that the lifespan protocol shutdown events work right for an
         application that supports the protocol but fails to shut down.
@@ -581,11 +655,13 @@ class TestCore(TestCase):
             }
         ]
 
-        async def send(event):
+        async def send(event: EventOrScope) -> None:
             mock_queue.send(event)
 
-        async def receive():
-            return mock_queue.receive()
+        async def receive() -> EventOrScope | None:
+            ret = mock_queue.receive()
+            assert isinstance(ret, dict)
+            return ret
 
         # Create the lifespan manager.
         uut = aioscgi.core.LifespanManager(send, receive)
@@ -607,7 +683,7 @@ class TestCore(TestCase):
             [call.send({"type": "lifespan.shutdown"}), call.receive()],
         )
 
-    def test_lifespan_not_supported(self):
+    def test_lifespan_not_supported(self: TestCore) -> None:
         """
         Test that the lifespan protocol works properly when the application
         doesn’t support it.
@@ -617,11 +693,13 @@ class TestCore(TestCase):
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [None]
 
-        async def send(event):
+        async def send(event: EventOrScope) -> None:
             mock_queue.send(event)
 
-        async def receive():
-            return mock_queue.receive()
+        async def receive() -> EventOrScope | None:
+            ret = mock_queue.receive()
+            assert ret is None
+            return ret
 
         # Create the lifespan manager.
         uut = aioscgi.core.LifespanManager(send, receive)

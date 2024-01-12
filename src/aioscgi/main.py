@@ -18,20 +18,57 @@ def main() -> None:
     """The application entry point."""
     try:
         # Discover the available I/O adapters.
-        io_adapters = {entry.name: entry for entry in importlib.metadata.entry_points(group="aioscgi.io")}
+        io_adapters = {
+            entry.name: entry
+            for entry in importlib.metadata.entry_points(group="aioscgi.io")
+        }
 
         # Parse and check command-line parameters.
-        parser = argparse.ArgumentParser(description="Run an ASGI application under asyncio.")
-        parser.add_argument("--adapter", default="asyncio", choices=io_adapters, help="the I/O adapter to use (default: asyncio)")
-        parser.add_argument("--base-uri", type=str, help="the request URI prefix to the base of the application for computing root_path and path (default: use SCRIPT_NAME and PATH_INFO instead)")
-        parser.add_argument("--logging", "-l", type=pathlib.Path, help="the JSON file containing a logging configuration dictionary per logging.config.dictConfig (default: none)")
-        parser.add_argument("--unix-socket", "-u", type=pathlib.Path, help="the UNIX socket path to listen on")
-        parser.add_argument("--tcp-port", "-p", type=int, help="the TCP port to listen on")
-        parser.add_argument("--tcp-host", action="append", help="the IP address(es) or hostname(s) to listen on (for TCP) (default: all interfaces)")
-        parser.add_argument("application", help="the dotted.module.name:callable of the application")
+        parser = argparse.ArgumentParser(
+            description="Run an ASGI application under asyncio."
+        )
+        parser.add_argument(
+            "--adapter",
+            default="asyncio",
+            choices=io_adapters,
+            help="the I/O adapter to use (default: asyncio)",
+        )
+        parser.add_argument(
+            "--base-uri",
+            type=str,
+            help="the request URI prefix to the base of the application for computing "
+            "root_path and path (default: use SCRIPT_NAME and PATH_INFO instead)",
+        )
+        parser.add_argument(
+            "--logging",
+            "-l",
+            type=pathlib.Path,
+            help="the JSON file containing a logging configuration dictionary per "
+            "logging.config.dictConfig (default: none)",
+        )
+        parser.add_argument(
+            "--unix-socket",
+            "-u",
+            type=pathlib.Path,
+            help="the UNIX socket path to listen on",
+        )
+        parser.add_argument(
+            "--tcp-port", "-p", type=int, help="the TCP port to listen on"
+        )
+        parser.add_argument(
+            "--tcp-host",
+            action="append",
+            help="the IP address(es) or hostname(s) to listen on (for TCP) (default: "
+            "all interfaces)",
+        )
+        parser.add_argument(
+            "application", help="the dotted.module.name:callable of the application"
+        )
         args = parser.parse_args()
         if sum(i is not None for i in (args.unix_socket, args.tcp_port)) != 1:
-            parser.error("Exactly one of --unix-socket and --tcp-port must be supplied.")
+            parser.error(
+                "Exactly one of --unix-socket and --tcp-port must be supplied."
+            )
 
         # Set up logging.
         if args.logging is not None:
@@ -48,7 +85,9 @@ def main() -> None:
         sys.path.insert(0, ".")
         app_parts = args.application.split(":")
         if len(app_parts) != 2:
-            parser.error("Application callable must be module name, colon, and callable name.")
+            parser.error(
+                "Application callable must be module name, colon, and callable name."
+            )
         app_module = importlib.import_module(app_parts[0])
         app_callable = app_module
         for part in app_parts[1].split("."):

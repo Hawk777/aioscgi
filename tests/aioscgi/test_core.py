@@ -21,7 +21,17 @@ def events_equal(event1, event2):
     """
     if type(event1) is not type(event2):
         return False
-    elif isinstance(event1, (sioscgi.RequestHeaders, sioscgi.RequestBody, sioscgi.RequestEnd, sioscgi.ResponseHeaders, sioscgi.ResponseBody, sioscgi.ResponseEnd)):
+    elif isinstance(
+        event1,
+        (
+            sioscgi.RequestHeaders,
+            sioscgi.RequestBody,
+            sioscgi.RequestEnd,
+            sioscgi.ResponseHeaders,
+            sioscgi.ResponseBody,
+            sioscgi.ResponseEnd,
+        ),
+    ):
         slots = event1.__slots__
         if isinstance(slots, str):
             slots = (slots,)
@@ -44,6 +54,7 @@ class EventMatcher:
     """
     A matcher that compares sioscgi event objects by their contents.
     """
+
     __slots__ = ("_expected",)
 
     def __init__(self, expected):
@@ -79,6 +90,7 @@ class TestCore(TestCase):
         """
         Test a simple application.
         """
+
         async def app(scope, receive, send):
             if scope["type"] == "lifespan":
                 raise ValueError("Lifespan protocol not supported by this application")
@@ -90,54 +102,73 @@ class TestCore(TestCase):
             self.assertEqual(scope["method"], "GET")
             self.assertEqual(scope["scheme"], "http")
             self.assertEqual(scope["path"], "")
-            self.assertEqual(scope["query_string"], B"")
+            self.assertEqual(scope["query_string"], b"")
             self.assertEqual(scope["headers"], [])
             self.assertEqual(scope["server"], ["localhost", 80])
-            self.assertEqual(scope["extensions"]["environ"], {
-                "SERVER_PROTOCOL": B"HTTP/1.1",
-                "REQUEST_METHOD": B"GET",
-                "QUERY_STRING": B"",
-                "SCRIPT_NAME": B"",
-                "SERVER_NAME": B"localhost",
-                "SERVER_PORT": B"80",
-            })
+            self.assertEqual(
+                scope["extensions"]["environ"],
+                {
+                    "SERVER_PROTOCOL": b"HTTP/1.1",
+                    "REQUEST_METHOD": b"GET",
+                    "QUERY_STRING": b"",
+                    "SCRIPT_NAME": b"",
+                    "SERVER_NAME": b"localhost",
+                    "SERVER_PORT": b"80",
+                },
+            )
 
             message = await receive()
             self.assertEqual(message["type"], "http.request")
             self.assertFalse(message.get("body"))
             self.assertFalse(message.get("more_body"))
 
-            await send({
-                "type": "http.response.start",
-                "status": 200,
-                "headers": [(b"content-type", b"text/plain; charset=UTF-8")]})
-            await send({
-                "type": "http.response.body",
-                "body": B"Hello World!"})
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [(b"content-type", b"text/plain; charset=UTF-8")],
+                }
+            )
+            await send({"type": "http.response.body", "body": b"Hello World!"})
+
         conn = conn_class.return_value
-        headers = sioscgi.RequestHeaders({
-            "SERVER_PROTOCOL": B"HTTP/1.1",
-            "REQUEST_METHOD": B"GET",
-            "QUERY_STRING": B"",
-            "SCRIPT_NAME": B"",
-            "SERVER_NAME": B"localhost",
-            "SERVER_PORT": B"80"})
+        headers = sioscgi.RequestHeaders(
+            {
+                "SERVER_PROTOCOL": b"HTTP/1.1",
+                "REQUEST_METHOD": b"GET",
+                "QUERY_STRING": b"",
+                "SCRIPT_NAME": b"",
+                "SERVER_NAME": b"localhost",
+                "SERVER_PORT": b"80",
+            }
+        )
         conn.next_event.side_effect = [headers, sioscgi.RequestEnd()]
-        conn.send.return_value = B""
+        conn.send.return_value = b""
         with self.assertRaises(StopIteration):
             aioscgi.core.Container(None).run(app, None, None).send(None)
-        self.assertEqual(list(conn.mock_calls), [
-            call.next_event(),
-            call.next_event(),
-            call.send(EventMatcher(sioscgi.ResponseHeaders("200 OK", [("Content-Type", "text/plain; charset=UTF-8")]))),
-            call.send(EventMatcher(sioscgi.ResponseBody(B"Hello World!"))),
-            call.send(EventMatcher(sioscgi.ResponseEnd()))])
+        self.assertEqual(
+            list(conn.mock_calls),
+            [
+                call.next_event(),
+                call.next_event(),
+                call.send(
+                    EventMatcher(
+                        sioscgi.ResponseHeaders(
+                            "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
+                        )
+                    )
+                ),
+                call.send(EventMatcher(sioscgi.ResponseBody(b"Hello World!"))),
+                call.send(EventMatcher(sioscgi.ResponseEnd())),
+            ],
+        )
 
     @patch("sioscgi.SCGIConnection")
     def test_multi_body(self, conn_class):
         """
         Test request and response bodies transported in multiple parts.
         """
+
         async def app(scope, receive, send):
             if scope["type"] == "lifespan":
                 raise ValueError("Lifespan protocol not supported by this application")
@@ -149,18 +180,18 @@ class TestCore(TestCase):
             self.assertEqual(scope["method"], "GET")
             self.assertEqual(scope["scheme"], "http")
             self.assertEqual(scope["path"], "")
-            self.assertEqual(scope["query_string"], B"")
-            self.assertEqual(scope["headers"], [[B"content-length", B"8"]])
+            self.assertEqual(scope["query_string"], b"")
+            self.assertEqual(scope["headers"], [[b"content-length", b"8"]])
             self.assertEqual(scope["server"], ["localhost", 80])
 
             message = await receive()
             self.assertEqual(message["type"], "http.request")
-            self.assertEqual(message.get("body"), B"abcd")
+            self.assertEqual(message.get("body"), b"abcd")
             self.assertTrue(message.get("more_body"))
 
             message = await receive()
             self.assertEqual(message["type"], "http.request")
-            self.assertEqual(message.get("body"), B"efgh")
+            self.assertEqual(message.get("body"), b"efgh")
             self.assertTrue(message.get("more_body"))
 
             message = await receive()
@@ -168,39 +199,65 @@ class TestCore(TestCase):
             self.assertFalse(message.get("body"))
             self.assertFalse(message.get("more_body"))
 
-            await send({
-                "type": "http.response.start",
-                "status": 200,
-                "headers": [(b"content-type", b"text/plain; charset=UTF-8"), (b"content-length", b"12")]})
-            await send({
-                "type": "http.response.body",
-                "body": B"Hello ",
-                "more_body": True})
-            await send({
-                "type": "http.response.body",
-                "body": B"World!"})
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [
+                        (b"content-type", b"text/plain; charset=UTF-8"),
+                        (b"content-length", b"12"),
+                    ],
+                }
+            )
+            await send(
+                {"type": "http.response.body", "body": b"Hello ", "more_body": True}
+            )
+            await send({"type": "http.response.body", "body": b"World!"})
+
         conn = conn_class.return_value
-        headers = sioscgi.RequestHeaders({
-            "SERVER_PROTOCOL": B"HTTP/1.1",
-            "REQUEST_METHOD": B"GET",
-            "QUERY_STRING": B"",
-            "SCRIPT_NAME": B"",
-            "SERVER_NAME": B"localhost",
-            "SERVER_PORT": B"80",
-            "CONTENT_LENGTH": B"8"})
-        conn.next_event.side_effect = [headers, sioscgi.RequestBody(B"abcd"), sioscgi.RequestBody(B"efgh"), sioscgi.RequestEnd()]
-        conn.send.return_value = B""
+        headers = sioscgi.RequestHeaders(
+            {
+                "SERVER_PROTOCOL": b"HTTP/1.1",
+                "REQUEST_METHOD": b"GET",
+                "QUERY_STRING": b"",
+                "SCRIPT_NAME": b"",
+                "SERVER_NAME": b"localhost",
+                "SERVER_PORT": b"80",
+                "CONTENT_LENGTH": b"8",
+            }
+        )
+        conn.next_event.side_effect = [
+            headers,
+            sioscgi.RequestBody(b"abcd"),
+            sioscgi.RequestBody(b"efgh"),
+            sioscgi.RequestEnd(),
+        ]
+        conn.send.return_value = b""
         with self.assertRaises(StopIteration):
             aioscgi.core.Container(None).run(app, None, None).send(None)
-        self.assertEqual(list(conn.mock_calls), [
-            call.next_event(),
-            call.next_event(),
-            call.next_event(),
-            call.next_event(),
-            call.send(EventMatcher(sioscgi.ResponseHeaders("200 OK", [("Content-Type", "text/plain; charset=UTF-8"), ("content-length", "12")]))),
-            call.send(EventMatcher(sioscgi.ResponseBody(B"Hello "))),
-            call.send(EventMatcher(sioscgi.ResponseBody(B"World!"))),
-            call.send(EventMatcher(sioscgi.ResponseEnd()))])
+        self.assertEqual(
+            list(conn.mock_calls),
+            [
+                call.next_event(),
+                call.next_event(),
+                call.next_event(),
+                call.next_event(),
+                call.send(
+                    EventMatcher(
+                        sioscgi.ResponseHeaders(
+                            "200 OK",
+                            [
+                                ("Content-Type", "text/plain; charset=UTF-8"),
+                                ("content-length", "12"),
+                            ],
+                        )
+                    )
+                ),
+                call.send(EventMatcher(sioscgi.ResponseBody(b"Hello "))),
+                call.send(EventMatcher(sioscgi.ResponseBody(b"World!"))),
+                call.send(EventMatcher(sioscgi.ResponseEnd())),
+            ],
+        )
 
     @patch("sioscgi.SCGIConnection")
     def test_disconnect_after_request(self, conn_class):
@@ -208,6 +265,7 @@ class TestCore(TestCase):
         Test a long polling type of application where the client disconnects
         before the response body is sent.
         """
+
         async def app(scope, receive, _):
             if scope["type"] == "lifespan":
                 raise ValueError("Lifespan protocol not supported by this application")
@@ -219,7 +277,7 @@ class TestCore(TestCase):
             self.assertEqual(scope["method"], "GET")
             self.assertEqual(scope["scheme"], "http")
             self.assertEqual(scope["path"], "")
-            self.assertEqual(scope["query_string"], B"")
+            self.assertEqual(scope["query_string"], b"")
             self.assertEqual(scope["headers"], [])
             self.assertEqual(scope["server"], ["localhost", 80])
 
@@ -232,33 +290,37 @@ class TestCore(TestCase):
             self.assertEqual(message["type"], "http.disconnect")
 
         conn = conn_class.return_value
-        headers = sioscgi.RequestHeaders({
-            "SERVER_PROTOCOL": B"HTTP/1.1",
-            "REQUEST_METHOD": B"GET",
-            "QUERY_STRING": B"",
-            "SCRIPT_NAME": B"",
-            "SERVER_NAME": B"localhost",
-            "SERVER_PORT": B"80"})
+        headers = sioscgi.RequestHeaders(
+            {
+                "SERVER_PROTOCOL": b"HTTP/1.1",
+                "REQUEST_METHOD": b"GET",
+                "QUERY_STRING": b"",
+                "SCRIPT_NAME": b"",
+                "SERVER_NAME": b"localhost",
+                "SERVER_PORT": b"80",
+            }
+        )
         conn.next_event.side_effect = [headers, sioscgi.RequestEnd(), None]
         raw_read = conn.raw_read
-        raw_read.return_value = B""
+        raw_read.return_value = b""
 
         async def raw_read_wrapper():
             return raw_read()
 
-        conn.send.return_value = B""
+        conn.send.return_value = b""
         with self.assertRaises(StopIteration):
             aioscgi.core.Container(None).run(app, raw_read_wrapper, None).send(None)
-        self.assertEqual(list(conn.mock_calls), [
-            call.next_event(),
-            call.next_event(),
-            call.raw_read()])
+        self.assertEqual(
+            list(conn.mock_calls),
+            [call.next_event(), call.next_event(), call.raw_read()],
+        )
 
     @patch("sioscgi.SCGIConnection")
     def test_disconnect_during_request(self, conn_class):
         """
         Test a case where the client disconnects while sending the request.
         """
+
         async def app(scope, receive, _):
             if scope["type"] == "lifespan":
                 raise ValueError("Lifespan protocol not supported by this application")
@@ -270,49 +332,57 @@ class TestCore(TestCase):
             self.assertEqual(scope["method"], "GET")
             self.assertEqual(scope["scheme"], "http")
             self.assertEqual(scope["path"], "")
-            self.assertEqual(scope["query_string"], B"")
-            self.assertEqual(scope["headers"], [[B"content-length", B"8"]])
+            self.assertEqual(scope["query_string"], b"")
+            self.assertEqual(scope["headers"], [[b"content-length", b"8"]])
             self.assertEqual(scope["server"], ["localhost", 80])
 
             message = await receive()
             self.assertEqual(message["type"], "http.request")
-            self.assertEqual(message.get("body"), B"1234")
+            self.assertEqual(message.get("body"), b"1234")
             self.assertTrue(message.get("more_body"))
 
             message = await receive()
             self.assertEqual(message["type"], "http.disconnect")
 
         conn = conn_class.return_value
-        headers = sioscgi.RequestHeaders({
-            "SERVER_PROTOCOL": B"HTTP/1.1",
-            "REQUEST_METHOD": B"GET",
-            "QUERY_STRING": B"",
-            "SCRIPT_NAME": B"",
-            "SERVER_NAME": B"localhost",
-            "SERVER_PORT": B"80",
-            "CONTENT_LENGTH": B"8"})
-        conn.next_event.side_effect = [headers, sioscgi.RequestBody(B"1234"), None]
+        headers = sioscgi.RequestHeaders(
+            {
+                "SERVER_PROTOCOL": b"HTTP/1.1",
+                "REQUEST_METHOD": b"GET",
+                "QUERY_STRING": b"",
+                "SCRIPT_NAME": b"",
+                "SERVER_NAME": b"localhost",
+                "SERVER_PORT": b"80",
+                "CONTENT_LENGTH": b"8",
+            }
+        )
+        conn.next_event.side_effect = [headers, sioscgi.RequestBody(b"1234"), None]
         raw_read = conn.raw_read
-        raw_read.return_value = B""
+        raw_read.return_value = b""
 
         async def raw_read_wrapper():
             return raw_read()
 
-        conn.send.return_value = B""
+        conn.send.return_value = b""
         with self.assertRaises(StopIteration):
             aioscgi.core.Container(None).run(app, raw_read_wrapper, None).send(None)
-        self.assertEqual(list(conn.mock_calls), [
-            call.next_event(),
-            call.next_event(),
-            call.next_event(),
-            call.raw_read(),
-            call.receive_data(B"")])
+        self.assertEqual(
+            list(conn.mock_calls),
+            [
+                call.next_event(),
+                call.next_event(),
+                call.next_event(),
+                call.raw_read(),
+                call.receive_data(b""),
+            ],
+        )
 
     @patch("sioscgi.SCGIConnection")
     def test_https(self, conn_class):
         """
         Test that an HTTPS request is recognized as such.
         """
+
         async def app(scope, receive, send):
             if scope["type"] == "lifespan":
                 raise ValueError("Lifespan protocol not supported by this application")
@@ -324,50 +394,68 @@ class TestCore(TestCase):
             self.assertEqual(scope["method"], "GET")
             self.assertEqual(scope["scheme"], "https")
             self.assertEqual(scope["path"], "")
-            self.assertEqual(scope["query_string"], B"")
+            self.assertEqual(scope["query_string"], b"")
             self.assertEqual(scope["headers"], [])
             self.assertEqual(scope["server"], ["localhost", 80])
-            self.assertEqual(scope["extensions"]["environ"], {
-                "SERVER_PROTOCOL": B"HTTP/1.1",
-                "REQUEST_METHOD": B"GET",
-                "QUERY_STRING": B"",
-                "SCRIPT_NAME": B"",
-                "SERVER_NAME": B"localhost",
-                "SERVER_PORT": B"80",
-                "HTTPS": B"1",
-            })
+            self.assertEqual(
+                scope["extensions"]["environ"],
+                {
+                    "SERVER_PROTOCOL": b"HTTP/1.1",
+                    "REQUEST_METHOD": b"GET",
+                    "QUERY_STRING": b"",
+                    "SCRIPT_NAME": b"",
+                    "SERVER_NAME": b"localhost",
+                    "SERVER_PORT": b"80",
+                    "HTTPS": b"1",
+                },
+            )
 
             message = await receive()
             self.assertEqual(message["type"], "http.request")
             self.assertFalse(message.get("body"))
             self.assertFalse(message.get("more_body"))
 
-            await send({
-                "type": "http.response.start",
-                "status": 200,
-                "headers": [(b"content-type", b"text/plain; charset=UTF-8")]})
-            await send({
-                "type": "http.response.body",
-                "body": B"Hello World!"})
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [(b"content-type", b"text/plain; charset=UTF-8")],
+                }
+            )
+            await send({"type": "http.response.body", "body": b"Hello World!"})
+
         conn = conn_class.return_value
-        headers = sioscgi.RequestHeaders({
-            "SERVER_PROTOCOL": B"HTTP/1.1",
-            "REQUEST_METHOD": B"GET",
-            "QUERY_STRING": B"",
-            "SCRIPT_NAME": B"",
-            "SERVER_NAME": B"localhost",
-            "SERVER_PORT": B"80",
-            "HTTPS": B"1"})
+        headers = sioscgi.RequestHeaders(
+            {
+                "SERVER_PROTOCOL": b"HTTP/1.1",
+                "REQUEST_METHOD": b"GET",
+                "QUERY_STRING": b"",
+                "SCRIPT_NAME": b"",
+                "SERVER_NAME": b"localhost",
+                "SERVER_PORT": b"80",
+                "HTTPS": b"1",
+            }
+        )
         conn.next_event.side_effect = [headers, sioscgi.RequestEnd()]
-        conn.send.return_value = B""
+        conn.send.return_value = b""
         with self.assertRaises(StopIteration):
             aioscgi.core.Container(None).run(app, None, None).send(None)
-        self.assertEqual(list(conn.mock_calls), [
-            call.next_event(),
-            call.next_event(),
-            call.send(EventMatcher(sioscgi.ResponseHeaders("200 OK", [("Content-Type", "text/plain; charset=UTF-8")]))),
-            call.send(EventMatcher(sioscgi.ResponseBody(B"Hello World!"))),
-            call.send(EventMatcher(sioscgi.ResponseEnd()))])
+        self.assertEqual(
+            list(conn.mock_calls),
+            [
+                call.next_event(),
+                call.next_event(),
+                call.send(
+                    EventMatcher(
+                        sioscgi.ResponseHeaders(
+                            "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
+                        )
+                    )
+                ),
+                call.send(EventMatcher(sioscgi.ResponseBody(b"Hello World!"))),
+                call.send(EventMatcher(sioscgi.ResponseEnd())),
+            ],
+        )
 
     def test_lifespan_startup_successful(self):
         """
@@ -398,7 +486,10 @@ class TestCore(TestCase):
         # The lifespan manager should send the lifespan.startup event, then
         # wait for the application to send the complete message before
         # returning.
-        self.assertEqual(mock_queue.mock_calls, [call.send({"type": "lifespan.startup"}), call.receive()])
+        self.assertEqual(
+            mock_queue.mock_calls,
+            [call.send({"type": "lifespan.startup"}), call.receive()],
+        )
 
     def test_lifespan_startup_failed(self):
         """
@@ -408,7 +499,12 @@ class TestCore(TestCase):
         # Create a mock queue and send and receive async callables that access
         # it.
         mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [{"type": "lifespan.startup.failed", "message": "Application failure message"}]
+        mock_queue.receive.side_effect = [
+            {
+                "type": "lifespan.startup.failed",
+                "message": "Application failure message",
+            }
+        ]
 
         async def send(event):
             mock_queue.send(event)
@@ -424,13 +520,19 @@ class TestCore(TestCase):
 
         # Run the lifespan startup process. It should raise an exception,
         # passing on the message from the application.
-        with self.assertRaises(aioscgi.core.ApplicationInitializationError, msg="Application failure message"):
+        with self.assertRaises(
+            aioscgi.core.ApplicationInitializationError,
+            msg="Application failure message",
+        ):
             uut.startup().send(None)
 
         # The lifespan manager should send the lifespan.startup event, then
         # wait for the application to send the failure message before raising
         # its own exception.
-        self.assertEqual(mock_queue.mock_calls, [call.send({"type": "lifespan.startup"}), call.receive()])
+        self.assertEqual(
+            mock_queue.mock_calls,
+            [call.send({"type": "lifespan.startup"}), call.receive()],
+        )
 
     def test_lifespan_shutdown_successful(self):
         """
@@ -461,7 +563,10 @@ class TestCore(TestCase):
         # The lifespan manager should send the lifespan.shutdown event, then
         # wait for the application to send the complete message before
         # returning.
-        self.assertEqual(mock_queue.mock_calls, [call.send({"type": "lifespan.shutdown"}), call.receive()])
+        self.assertEqual(
+            mock_queue.mock_calls,
+            [call.send({"type": "lifespan.shutdown"}), call.receive()],
+        )
 
     def test_lifespan_shutdown_failed(self):
         """
@@ -471,7 +576,12 @@ class TestCore(TestCase):
         # Create a mock queue and send and receive async callables that access
         # it.
         mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [{"type": "lifespan.shutdown.failed", "message": "Application failure message"}]
+        mock_queue.receive.side_effect = [
+            {
+                "type": "lifespan.shutdown.failed",
+                "message": "Application failure message",
+            }
+        ]
 
         async def send(event):
             mock_queue.send(event)
@@ -494,7 +604,10 @@ class TestCore(TestCase):
         # The lifespan manager should send the lifespan.startup event, then
         # wait for the application to send the failure message before raising
         # its own exception.
-        self.assertEqual(mock_queue.mock_calls, [call.send({"type": "lifespan.shutdown"}), call.receive()])
+        self.assertEqual(
+            mock_queue.mock_calls,
+            [call.send({"type": "lifespan.shutdown"}), call.receive()],
+        )
 
     def test_lifespan_not_supported(self):
         """
@@ -532,4 +645,7 @@ class TestCore(TestCase):
         # receive the indication of no support (representing the application
         # callback raising an exception), then not interact with the queue
         # again afterwards.
-        self.assertEqual(mock_queue.mock_calls, [call.send({"type": "lifespan.startup"}), call.receive()])
+        self.assertEqual(
+            mock_queue.mock_calls,
+            [call.send({"type": "lifespan.startup"}), call.receive()],
+        )

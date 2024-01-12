@@ -27,7 +27,9 @@ ReceiveFunction = Callable[[], Awaitable[EventOrScope]]
 SendFunction = Callable[[EventOrScope], Awaitable[None]]
 """The type of the send function."""
 
-ApplicationType = Callable[[EventOrScope, ReceiveFunction, SendFunction], Awaitable[Any]]
+ApplicationType = Callable[
+    [EventOrScope, ReceiveFunction, SendFunction], Awaitable[Any]
+]
 """The type of an ASGI application callable."""
 
 
@@ -36,6 +38,7 @@ class ApplicationInitializationError(Exception):
     Raised if the application uses the lifespan protocol to initialize itself
     and reports failure during initialization.
     """
+
     __slots__ = ()
 
 
@@ -43,9 +46,14 @@ class LifespanManager:
     """
     Implements the ASGI lifespan protocol.
     """
+
     __slots__ = ("_send", "_receive", "_unsupported")
 
-    def __init__(self, send: SendFunction, receive: Callable[[], Awaitable[Optional[EventOrScope]]]):
+    def __init__(
+        self,
+        send: SendFunction,
+        receive: Callable[[], Awaitable[Optional[EventOrScope]]],
+    ):
         """
         Construct a new LifespanManager.
 
@@ -76,7 +84,12 @@ class LifespanManager:
         :param event: The event to check.
         """
         event_type = event["type"]
-        if event_type not in ("lifespan.startup.complete", "lifespan.startup.failed", "lifespan.shutdown.complete", "lifespan.shutdown.failed"):
+        if event_type not in (
+            "lifespan.startup.complete",
+            "lifespan.startup.failed",
+            "lifespan.shutdown.complete",
+            "lifespan.shutdown.failed",
+        ):
             raise ValueError(f"Unknown event type {event_type!r}")
 
     async def startup(self) -> None:
@@ -89,7 +102,9 @@ class LifespanManager:
         logging.getLogger(__name__).debug("LifespanManager sending startup message")
         await self._send({"type": "lifespan.startup"})
         reply = await self._receive()
-        logging.getLogger(__name__).debug("LifespanManager received startup reply: %s", reply)
+        logging.getLogger(__name__).debug(
+            "LifespanManager received startup reply: %s", reply
+        )
         if reply is None:
             # The application coroutine terminated with an exception, which the
             # I/O adapter encoded as a None in the receive queue. This means
@@ -116,10 +131,14 @@ class LifespanManager:
         shutdown don’t really mean anything.
         """
         if not self._unsupported:
-            logging.getLogger(__name__).debug("LifespanManager sending shutdown message")
+            logging.getLogger(__name__).debug(
+                "LifespanManager sending shutdown message"
+            )
             await self._send({"type": "lifespan.shutdown"})
             reply = await self._receive()
-            logging.getLogger(__name__).debug("LifespanManager received shutdown reply: %s", reply)
+            logging.getLogger(__name__).debug(
+                "LifespanManager received shutdown reply: %s", reply
+            )
             if reply is None:
                 # The application coroutine terminated with an exception, which
                 # the I/O adapter encoded as a None in the receive queue. This
@@ -131,7 +150,10 @@ class LifespanManager:
                 self._unsupported = True
             else:
                 reply_type = reply["type"]
-                if reply_type in ("lifespan.shutdown.complete", "lifespan.shutdown.failed"):
+                if reply_type in (
+                    "lifespan.shutdown.complete",
+                    "lifespan.shutdown.failed",
+                ):
                     # The application has finished shutting down, successfully
                     # or otherwise.
                     pass
@@ -149,8 +171,8 @@ def _calc_http_version(server_protocol: bytes) -> str:
     """
     server_protocol_str = server_protocol.decode("UTF-8").upper()
     if server_protocol_str.startswith("HTTP/"):
-        return server_protocol_str[len("HTTP/"):]
-    elif server_protocol == B"INCLUDED":
+        return server_protocol_str[len("HTTP/") :]
+    elif server_protocol == b"INCLUDED":
         return "1.0"
     else:
         raise ValueError(f"Unrecognized HTTP protocol version {server_protocol_str}")
@@ -186,7 +208,12 @@ def _calc_http_headers(environ: dict[str, bytes]) -> list[list[bytes]]:
     return [
         [k.replace("HTTP_", "", 1).replace("_", "-").lower().encode("ISO-8859-1"), v]
         for k, v in environ.items()
-        if (k.startswith("HTTP_") and k not in ("HTTP_CONTENT_LENGTH", "HTTP_CONTENT_TYPE")) or k in ("CONTENT_LENGTH", "CONTENT_TYPE")]
+        if (
+            k.startswith("HTTP_")
+            and k not in ("HTTP_CONTENT_LENGTH", "HTTP_CONTENT_TYPE")
+        )
+        or k in ("CONTENT_LENGTH", "CONTENT_TYPE")
+    ]
 
 
 def _calc_client(environ: dict[str, bytes]) -> Optional[list[Any]]:
@@ -227,6 +254,7 @@ class _Instance:
     """
     The handler for one accepted connection.
     """
+
     __slots__ = (
         "_application",
         "_read_cb",
@@ -236,9 +264,16 @@ class _Instance:
         "_request_ended",
         "_conn",
         "_response_headers",
-        "_response_headers_sent")
+        "_response_headers_sent",
+    )
 
-    def __init__(self, application: ApplicationType, read_cb: Callable[[], Awaitable[bytes]], write_cb: Callable[[bytes, bool], Awaitable[None]], base_uri: Optional[str]):
+    def __init__(
+        self,
+        application: ApplicationType,
+        read_cb: Callable[[], Awaitable[bytes]],
+        write_cb: Callable[[bytes, bool], Awaitable[None]],
+        base_uri: Optional[str],
+    ):
         """
         Construct a new _Instance.
 
@@ -295,13 +330,19 @@ class _Instance:
             try:
                 request_uri_str = request_uri.decode("UTF-8")
             except UnicodeDecodeError:
-                logging.getLogger(__name__).error("REQUEST_URI %s is not valid UTF-8", request_uri)
+                logging.getLogger(__name__).error(
+                    "REQUEST_URI %s is not valid UTF-8", request_uri
+                )
                 return
             if not request_uri_str.startswith(self._base_uri):
-                logging.getLogger(__name__).error("REQUEST_URI \"%s\" does not start with specified base URI \"%s\"", request_uri_str, self._base_uri)
+                logging.getLogger(__name__).error(
+                    'REQUEST_URI "%s" does not start with specified base URI "%s"',
+                    request_uri_str,
+                    self._base_uri,
+                )
                 return
             root_path = self._base_uri
-            path = request_uri_str[len(root_path):]
+            path = request_uri_str[len(root_path) :]
         else:
             # No base path was given. The HTTP server is to be trusted to break
             # down the request into a part designating the application (called
@@ -312,13 +353,17 @@ class _Instance:
             try:
                 root_path = script_name.decode("UTF-8")
             except UnicodeDecodeError:
-                logging.getLogger(__name__).error("SCRIPT_NAME %s is not valid UTF-8", script_name)
+                logging.getLogger(__name__).error(
+                    "SCRIPT_NAME %s is not valid UTF-8", script_name
+                )
                 return
-            path_info = environ.get("PATH_INFO", B"")
+            path_info = environ.get("PATH_INFO", b"")
             try:
                 path = path_info.decode("UTF-8")
             except UnicodeDecodeError:
-                logging.getLogger(__name__).error("PATH_INFO %s is not valid UTF-8", path_info)
+                logging.getLogger(__name__).error(
+                    "PATH_INFO %s is not valid UTF-8", path_info
+                )
                 return
 
         # UTF-8-decode the REQUEST_METHOD and SERVER_NAME fields.
@@ -326,13 +371,17 @@ class _Instance:
         try:
             request_method_str = request_method.decode("UTF-8")
         except UnicodeDecodeError:
-            logging.getLogger(__name__).error("REQUEST_METHOD %s is invalid UTF-8", request_method)
+            logging.getLogger(__name__).error(
+                "REQUEST_METHOD %s is invalid UTF-8", request_method
+            )
             return
         server_name = environ["SERVER_NAME"]
         try:
             server_name_str = server_name.decode("UTF-8")
         except UnicodeDecodeError:
-            logging.getLogger(__name__).error("SERVER_NAME %s is invalid UTF-8", server_name)
+            logging.getLogger(__name__).error(
+                "SERVER_NAME %s is invalid UTF-8", server_name
+            )
             return
 
         # Build a scope dictionary.
@@ -374,7 +423,9 @@ class _Instance:
             # http.disconnect. This might be useful as part of a wait-for-any
             # scheme where the application wants to wait for either some
             # external event or the client to disconnect, for long polling.
-            logging.getLogger(__name__).debug("receive called after end of request: wait for disconnect")
+            logging.getLogger(__name__).debug(
+                "receive called after end of request: wait for disconnect"
+            )
             await self._read_chunk()
             self._disconnected = True
             return {"type": "http.disconnect"}
@@ -385,13 +436,19 @@ class _Instance:
             except sioscgi.RemoteProtocolError:
                 self._request_ended = True
                 self._disconnected = True
-                logging.getLogger(__name__).error("SCGI remote protocol error", exc_info=True)
+                logging.getLogger(__name__).error(
+                    "SCGI remote protocol error", exc_info=True
+                )
                 return {"type": "http.disconnect"}
             if event is not None:
                 # Translate the event into an ASGI event.
                 assert isinstance(event, (sioscgi.RequestBody, sioscgi.RequestEnd))
                 if isinstance(event, sioscgi.RequestBody):
-                    return {"type": "http.request", "body": event.data, "more_body": True}
+                    return {
+                        "type": "http.request",
+                        "body": event.data,
+                        "more_body": True,
+                    }
                 else:
                     self._request_ended = True
                     return {"type": "http.request"}
@@ -413,7 +470,10 @@ class _Instance:
             assert isinstance(status_code, int)
             headers = event["headers"]
             assert isinstance(headers, list)
-            self._response_headers = sioscgi.ResponseHeaders(_calc_status(status_code), [(k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers])
+            self._response_headers = sioscgi.ResponseHeaders(
+                _calc_status(status_code),
+                [(k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers],
+            )
         elif event_type == "http.response.body":
             await self._send_headers()
             body = event.get("body")
@@ -432,7 +492,7 @@ class _Instance:
         try:
             return await self._read_cb()
         except ConnectionResetError:
-            return B""
+            return b""
 
     async def _send_headers(self) -> None:
         """
@@ -455,7 +515,9 @@ class _Instance:
         Send an event to the SCGI client.
         """
         raw = self._conn.send(event)
-        if raw and not self._disconnected:  # If disconnected, silently discard (ASGI says so).
+        if (
+            raw and not self._disconnected
+        ):  # If disconnected, silently discard (ASGI says so).
             try:
                 await self._write_cb(raw, drain)
             except (BrokenPipeError, ConnectionResetError):
@@ -479,7 +541,12 @@ class Container:
         """
         self._base_uri: Optional[str] = base_uri
 
-    def run(self, application: ApplicationType, read_cb: Callable[[], Awaitable[bytes]], write_cb: Callable[[bytes, bool], Awaitable[None]]) -> Awaitable[None]:
+    def run(
+        self,
+        application: ApplicationType,
+        read_cb: Callable[[], Awaitable[bytes]],
+        write_cb: Callable[[bytes, bool], Awaitable[None]],
+    ) -> Awaitable[None]:
         """
         Run the application to handle one client connection.
 

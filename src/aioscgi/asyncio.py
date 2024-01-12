@@ -20,7 +20,12 @@ def _do_nothing() -> None:
     """
 
 
-async def _lifespan_coro(application: core.ApplicationType, lifespan_manager: core.LifespanManager, send: Callable[[Optional[core.EventOrScope]], Awaitable[None]], receive: Callable[[], Awaitable[core.EventOrScope]]) -> None:
+async def _lifespan_coro(
+    application: core.ApplicationType,
+    lifespan_manager: core.LifespanManager,
+    send: Callable[[Optional[core.EventOrScope]], Awaitable[None]],
+    receive: Callable[[], Awaitable[core.EventOrScope]],
+) -> None:
     """
     Wrap the application coroutine for delivering lifespan protocol events.
 
@@ -32,6 +37,7 @@ async def _lifespan_coro(application: core.ApplicationType, lifespan_manager: co
         LifespanManager’s send callback is invoked and then returns the value
         thus sent.
     """
+
     # Wrap the send callable in an extra layer that validates the message
     # before sending it.
     def send_wrapper(event: core.EventOrScope) -> Awaitable[None]:
@@ -47,11 +53,19 @@ async def _lifespan_coro(application: core.ApplicationType, lifespan_manager: co
     try:
         await application(lifespan_manager.scope, receive, send_wrapper)
     except Exception as exp:  # pylint: disable=broad-except
-        logging.getLogger(__name__).debug("Application coroutine raised exception %s for lifespan protocol", exp)
+        logging.getLogger(__name__).debug(
+            "Application coroutine raised exception %s for lifespan protocol", exp
+        )
         await send(None)
 
 
-async def _connection_wrapper(application: core.ApplicationType, client_connections: set[asyncio.Task[None]], container: core.Container, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+async def _connection_wrapper(
+    application: core.ApplicationType,
+    client_connections: set[asyncio.Task[None]],
+    container: core.Container,
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+) -> None:
     """
     Run an ASGI application in an asyncio server.
 
@@ -79,10 +93,17 @@ async def _connection_wrapper(application: core.ApplicationType, client_connecti
                 writer.write(data)
                 if drain:
                     await writer.drain()
+
             # Run the application.
-            await container.run(application, functools.partial(reader.read, io.DEFAULT_BUFFER_SIZE), write_cb)
+            await container.run(
+                application,
+                functools.partial(reader.read, io.DEFAULT_BUFFER_SIZE),
+                write_cb,
+            )
         except Exception:  # pylint: disable=broad-except
-            logging.getLogger(__name__).error("Uncaught exception in application callable", exc_info=True)
+            logging.getLogger(__name__).error(
+                "Uncaught exception in application callable", exc_info=True
+            )
         finally:
             # Close the connection.
             try:
@@ -98,7 +119,12 @@ async def _connection_wrapper(application: core.ApplicationType, client_connecti
         client_connections.remove(task)
 
 
-async def _main_coroutine(application: core.ApplicationType, start_server_fn: Callable[..., Awaitable[Any]], after_listen_cb: Callable[[], None], container: core.Container) -> None:
+async def _main_coroutine(
+    application: core.ApplicationType,
+    start_server_fn: Callable[..., Awaitable[Any]],
+    after_listen_cb: Callable[[], None],
+    container: core.Container,
+) -> None:
     """
     The top-level coroutine.
 
@@ -119,6 +145,7 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
     # endless wait and non-graceful termination.
     term_sig = loop.create_future()
     if hasattr(loop, "add_signal_handler"):
+
         def signal_handler(signal_name: str) -> None:
             """
             Handle a signal.
@@ -128,15 +155,32 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
             except asyncio.InvalidStateError:
                 # Future already done.
                 pass
+
         for signal_name in ("SIGINT", "SIGTERM"):
             if hasattr(signal, signal_name):
-                loop.add_signal_handler(getattr(signal, signal_name), functools.partial(signal_handler, signal_name))
+                loop.add_signal_handler(
+                    getattr(signal, signal_name),
+                    functools.partial(signal_handler, signal_name),
+                )
 
     # Start up the lifespan protocol.
-    lifespan_app_to_framework_queue: "asyncio.Queue[Optional[core.EventOrScope]]" = asyncio.Queue()
-    lifespan_framework_to_app_queue: "asyncio.Queue[core.EventOrScope]" = asyncio.Queue()
-    lifespan_manager = core.LifespanManager(lifespan_framework_to_app_queue.put, lifespan_app_to_framework_queue.get)
-    asyncio.ensure_future(_lifespan_coro(application, lifespan_manager, lifespan_app_to_framework_queue.put, lifespan_framework_to_app_queue.get))
+    lifespan_app_to_framework_queue: "asyncio.Queue[Optional[core.EventOrScope]]" = (
+        asyncio.Queue()
+    )
+    lifespan_framework_to_app_queue: "asyncio.Queue[core.EventOrScope]" = (
+        asyncio.Queue()
+    )
+    lifespan_manager = core.LifespanManager(
+        lifespan_framework_to_app_queue.put, lifespan_app_to_framework_queue.get
+    )
+    asyncio.ensure_future(
+        _lifespan_coro(
+            application,
+            lifespan_manager,
+            lifespan_app_to_framework_queue.put,
+            lifespan_framework_to_app_queue.get,
+        )
+    )
 
     try:
         # Start up the application.
@@ -145,13 +189,19 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
         try:
             # Start the server and, if provided, run the after listen callback.
             client_connections: set[asyncio.Task[None]] = set()
-            srv = await start_server_fn(functools.partial(_connection_wrapper, application, client_connections, container))
+            srv = await start_server_fn(
+                functools.partial(
+                    _connection_wrapper, application, client_connections, container
+                )
+            )
             after_listen_cb()
             logging.getLogger(__name__).info("Server up and running")
 
             # Wait until requested to terminate.
             signal_name = await term_sig
-            logging.getLogger(__name__).info("Caught termination signal %s", signal_name)
+            logging.getLogger(__name__).info(
+                "Caught termination signal %s", signal_name
+            )
 
             # Close the listening socket.
             srv.close()
@@ -184,10 +234,17 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
                     # Nothing to see here. Move along.
                     pass
                 except Exception:  # pylint: disable=broad-except
-                    logging.getLogger(__name__).error("Uncaught exception while cancelling task", exc_info=True)
+                    logging.getLogger(__name__).error(
+                        "Uncaught exception while cancelling task", exc_info=True
+                    )
 
 
-def run_tcp(application: core.ApplicationType, hosts: Optional[list[str]], port: int, container: core.Container) -> None:
+def run_tcp(
+    application: core.ApplicationType,
+    hosts: Optional[list[str]],
+    port: int,
+    container: core.Container,
+) -> None:
     """
     Run an application listening for SCGI connections on a TCP port.
 
@@ -197,10 +254,19 @@ def run_tcp(application: core.ApplicationType, hosts: Optional[list[str]], port:
     :param port: The port number.
     :param container: The ASGI container to use.
     """
-    asyncio.run(_main_coroutine(application, functools.partial(asyncio.start_server, host=hosts, port=port), _do_nothing, container))
+    asyncio.run(
+        _main_coroutine(
+            application,
+            functools.partial(asyncio.start_server, host=hosts, port=port),
+            _do_nothing,
+            container,
+        )
+    )
 
 
-def run_unix(application: core.ApplicationType, path: str, container: core.Container) -> None:
+def run_unix(
+    application: core.ApplicationType, path: str, container: core.Container
+) -> None:
     """
     Run an application listening for SCGI connections on a UNIX socket.
 
@@ -214,4 +280,11 @@ def run_unix(application: core.ApplicationType, path: str, container: core.Conta
     :param path: The filename of the socket to listen on.
     :param container: The ASGI container to use.
     """
-    asyncio.run(_main_coroutine(application, functools.partial(asyncio.start_unix_server, path=path), functools.partial(os.chmod, path, 0o666), container))
+    asyncio.run(
+        _main_coroutine(
+            application,
+            functools.partial(asyncio.start_unix_server, path=path),
+            functools.partial(os.chmod, path, 0o666),
+            container,
+        )
+    )

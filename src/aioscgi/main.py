@@ -30,7 +30,7 @@ def main() -> None:
         parser.add_argument("--tcp-host", action="append", help="the IP address(es) or hostname(s) to listen on (for TCP) (default: all interfaces)")
         parser.add_argument("application", help="the dotted.module.name:callable of the application")
         args = parser.parse_args()
-        if sum(1 if i is not None else 0 for i in (args.unix_socket, args.tcp_port)) != 1:
+        if sum(i is not None for i in (args.unix_socket, args.tcp_port)) != 1:
             parser.error("Exactly one of --unix-socket and --tcp-port must be supplied.")
 
         # Set up logging.

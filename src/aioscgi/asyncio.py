@@ -164,12 +164,10 @@ async def _main_coroutine(
                 )
 
     # Start up the lifespan protocol.
-    lifespan_app_to_framework_queue: "asyncio.Queue[Optional[core.EventOrScope]]" = (
-        asyncio.Queue()
-    )
-    lifespan_framework_to_app_queue: "asyncio.Queue[core.EventOrScope]" = (
-        asyncio.Queue()
-    )
+    lifespan_app_to_framework_queue: asyncio.Queue[
+        Optional[core.EventOrScope]
+    ] = asyncio.Queue()
+    lifespan_framework_to_app_queue: asyncio.Queue[core.EventOrScope] = asyncio.Queue()
     lifespan_manager = core.LifespanManager(
         lifespan_framework_to_app_queue.put, lifespan_app_to_framework_queue.get
     )

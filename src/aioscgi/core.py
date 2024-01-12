@@ -6,6 +6,8 @@ The server implemented in this module runs an ASGI application.
 The main entry point is the run function.
 """
 
+from __future__ import annotations
+
 import http
 import logging
 from collections.abc import Awaitable, Callable
@@ -50,10 +52,10 @@ class LifespanManager:
     __slots__ = ("_send", "_receive", "_unsupported")
 
     def __init__(
-        self,
+        self: LifespanManager,
         send: SendFunction,
         receive: Callable[[], Awaitable[EventOrScope | None]],
-    ):
+    ) -> None:
         """
         Construct a new LifespanManager.
 
@@ -70,7 +72,7 @@ class LifespanManager:
         self._unsupported: bool = False
 
     @property
-    def scope(self) -> EventOrScope:
+    def scope(self: LifespanManager) -> EventOrScope:
         """
         The scope that should be passed to the application callable.
         """
@@ -92,7 +94,7 @@ class LifespanManager:
         ):
             raise ValueError(f"Unknown event type {event_type!r}")
 
-    async def startup(self) -> None:
+    async def startup(self: LifespanManager) -> None:
         """
         Perform the application startup process.
 
@@ -123,7 +125,7 @@ class LifespanManager:
             else:
                 raise ValueError(f"Unknown message type {reply_type!r}")
 
-    async def shutdown(self) -> None:
+    async def shutdown(self: LifespanManager) -> None:
         """
         Perform the application shutdown process.
 
@@ -268,12 +270,12 @@ class _Instance:
     )
 
     def __init__(
-        self,
+        self: _Instance,
         application: ApplicationType,
         read_cb: Callable[[], Awaitable[bytes]],
         write_cb: Callable[[bytes, bool], Awaitable[None]],
         base_uri: str | None,
-    ):
+    ) -> None:
         """
         Construct a new _Instance.
 
@@ -294,7 +296,7 @@ class _Instance:
         self._response_headers: sioscgi.ResponseHeaders | None = None
         self._response_headers_sent: bool = False
 
-    async def run(self) -> None:
+    async def run(self: _Instance) -> None:
         """
         Run the application.
         """
@@ -409,7 +411,7 @@ class _Instance:
         logging.getLogger(__name__).debug("Starting application with scope %s", scope)
         await self._application(scope, self._receive, self._send)
 
-    async def _receive(self) -> EventOrScope:
+    async def _receive(self: _Instance) -> EventOrScope:
         """
         Receive the next event from the SCGI client to the application.
         """
@@ -462,7 +464,7 @@ class _Instance:
                     logging.getLogger(__name__).debug("Premature EOF on SCGI socket")
                     return {"type": "http.disconnect"}
 
-    async def _send(self, event: EventOrScope) -> None:
+    async def _send(self: _Instance, event: EventOrScope) -> None:
         event_type = event["type"]
         if event_type == "http.response.start":
             assert self._response_headers is None
@@ -485,7 +487,7 @@ class _Instance:
         else:
             raise ValueError(f"Unknown event type {event_type!r} passed to send")
 
-    async def _read_chunk(self) -> bytes:
+    async def _read_chunk(self: _Instance) -> bytes:
         """
         Read the next chunk from the SCGI client.
         """
@@ -494,7 +496,7 @@ class _Instance:
         except ConnectionResetError:
             return b""
 
-    async def _send_headers(self) -> None:
+    async def _send_headers(self: _Instance) -> None:
         """
         Send the headers to the SCGI client, if not already been sent.
         """
@@ -510,7 +512,7 @@ class _Instance:
 
             self._response_headers_sent = True
 
-    async def _send_event(self, event: sioscgi.Event, drain: bool) -> None:
+    async def _send_event(self: _Instance, event: sioscgi.Event, drain: bool) -> None:
         """
         Send an event to the SCGI client.
         """
@@ -531,7 +533,7 @@ class Container:
 
     __slots__ = ("_base_uri",)
 
-    def __init__(self, base_uri: str | None):
+    def __init__(self: Container, base_uri: str | None) -> None:
         """
         Construct a new ASGI container.
 
@@ -542,7 +544,7 @@ class Container:
         self._base_uri: str | None = base_uri
 
     def run(
-        self,
+        self: Container,
         application: ApplicationType,
         read_cb: Callable[[], Awaitable[bytes]],
         write_cb: Callable[[bytes, bool], Awaitable[None]],

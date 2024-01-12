@@ -9,7 +9,7 @@ import io
 import logging
 import os
 import signal
-from typing import Any, Optional
+from typing import Optional
 
 from . import core
 
@@ -121,7 +121,7 @@ async def _connection_wrapper(
 
 async def _main_coroutine(
     application: core.ApplicationType,
-    start_server_fn: Callable[..., Awaitable[Any]],
+    start_server_fn: Callable[..., Awaitable[asyncio.Server]],
     after_listen_cb: Callable[[], None],
     container: core.Container,
 ) -> None:

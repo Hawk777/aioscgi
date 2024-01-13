@@ -125,7 +125,7 @@ async def _main_coroutine(
     container: core.Container,
 ) -> None:
     """
-    The top-level coroutine.
+    Run the application in an asyncio event loop.
 
     :param application: The application callable.
     :param start_server_fn: Either asyncio.start_server or

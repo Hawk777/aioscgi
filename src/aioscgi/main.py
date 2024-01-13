@@ -15,7 +15,7 @@ from . import core
 
 
 def main() -> None:
-    """The application entry point."""
+    """Run the application."""
     try:
         # Discover the available I/O adapters.
         io_adapters = {

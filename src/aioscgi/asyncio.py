@@ -1,6 +1,7 @@
 """An I/O adapter connecting aioscgi to the Python standard library asyncio."""
 
 import asyncio
+import contextlib
 import functools
 import io
 import logging
@@ -142,11 +143,10 @@ async def _main_coroutine(
 
         def signal_handler(signal_name: str) -> None:
             """Handle a signal."""
-            try:
+            # InvalidStateError is raised if the future has already completed, which it
+            # might have if two signals are received.
+            with contextlib.suppress(asyncio.InvalidStateError):
                 term_sig.set_result(signal_name)
-            except asyncio.InvalidStateError:
-                # Future already done.
-                pass
 
         for signal_name in ("SIGINT", "SIGTERM"):
             if hasattr(signal, signal_name):

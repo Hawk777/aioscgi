@@ -1,12 +1,12 @@
 """An I/O adapter connecting aioscgi to the Python standard library asyncio."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
 import functools
 import io
 import logging
 import os
 import signal
+from collections.abc import Awaitable, Callable
 
 from . import core
 

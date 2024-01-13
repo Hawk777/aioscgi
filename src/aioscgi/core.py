@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import http
 import logging
+import wsgiref.util
 from collections.abc import Awaitable, Callable
 from typing import Any
-import wsgiref.util
 
 import sioscgi
-
 
 EventOrScopeValue = bytes | str | int | float | list[Any] | dict[str, Any] | bool | None
 """The legal types of values in event or scope dictionaries."""

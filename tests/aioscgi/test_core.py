@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import wsgiref.headers
 from collections.abc import Coroutine
 from unittest import TestCase
-from unittest.mock import call, MagicMock, patch
-import wsgiref.headers
+from unittest.mock import MagicMock, call, patch
 
 import sioscgi
 

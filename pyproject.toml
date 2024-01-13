@@ -23,3 +23,21 @@ disable = [
 	"too-many-return-statements",
 	"too-many-statements",
 ]
+
+[tool.ruff]
+allowed-confusables = ["’"]
+ignore = [
+	"C901", # complex-structure
+	"COM812", # missing-trailing-comma
+	"D203", # one-blank-line-before-class
+	"D212", # multi-line-summary-first-line
+	"FBT001", # boolean-type-hint-positional-argument
+	"PLR09", # too-many-<foo>
+	"PT", # pytest-related stuff
+	"S101", # assert
+	"S110", # try-except-pass
+	"TCH001", # typing-only-first-party-import
+]
+select = ["ALL"]
+src = ["src"]
+target-version = "py310"

@@ -46,7 +46,7 @@ async def _lifespan_coro(
     # then send None, signalling to the LifespanManager that this happened.
     try:
         await application(lifespan_manager.scope, receive, send_wrapper)
-    except Exception as exp:  # pylint: disable=broad-except
+    except Exception as exp:  # pylint: disable=broad-except # noqa: BLE001
         logging.getLogger(__name__).debug(
             "Application coroutine raised exception %s for lifespan protocol", exp
         )
@@ -94,7 +94,7 @@ async def _connection_wrapper(
                 functools.partial(reader.read, io.DEFAULT_BUFFER_SIZE),
                 write_cb,
             )
-        except Exception:  # pylint: disable=broad-except
+        except Exception:  # pylint: disable=broad-except # noqa: BLE001
             logging.getLogger(__name__).error(
                 "Uncaught exception in application callable", exc_info=True
             )
@@ -104,7 +104,7 @@ async def _connection_wrapper(
                 if writer.can_write_eof():
                     writer.write_eof()
                 writer.close()
-            except Exception:  # pylint: disable=broad-except
+            except Exception:  # pylint: disable=broad-except # noqa: BLE001
                 # If something went wrong while closing the connection, there’s nothing
                 # interesting to report.
                 pass
@@ -221,7 +221,7 @@ async def _main_coroutine(
                 except asyncio.CancelledError:
                     # Nothing to see here. Move along.
                     pass
-                except Exception:  # pylint: disable=broad-except
+                except Exception:  # pylint: disable=broad-except # noqa: BLE001
                     logging.getLogger(__name__).error(
                         "Uncaught exception while cancelling task", exc_info=True
                     )

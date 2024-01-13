@@ -1,6 +1,4 @@
-"""
-An I/O adapter connecting aioscgi to the Python standard library asyncio.
-"""
+"""An I/O adapter connecting aioscgi to the Python standard library asyncio."""
 
 import asyncio
 from collections.abc import Awaitable, Callable
@@ -14,9 +12,7 @@ from . import core
 
 
 def _do_nothing() -> None:
-    """
-    Do nothing.
-    """
+    """Do nothing."""
 
 
 async def _lifespan_coro(
@@ -146,9 +142,7 @@ async def _main_coroutine(
     if hasattr(loop, "add_signal_handler"):
 
         def signal_handler(signal_name: str) -> None:
-            """
-            Handle a signal.
-            """
+            """Handle a signal."""
             try:
                 term_sig.set_result(signal_name)
             except asyncio.InvalidStateError:

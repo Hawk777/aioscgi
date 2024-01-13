@@ -45,9 +45,7 @@ class ApplicationInitializationError(Exception):
 
 
 class LifespanManager:
-    """
-    Implements the ASGI lifespan protocol.
-    """
+    """Implements the ASGI lifespan protocol."""
 
     __slots__ = ("_send", "_receive", "_unsupported")
 
@@ -73,9 +71,7 @@ class LifespanManager:
 
     @property
     def scope(self: LifespanManager) -> EventOrScope:
-        """
-        The scope that should be passed to the application callable.
-        """
+        """The scope that should be passed to the application callable."""
         return {"type": "lifespan", "asgi": {"version": "3.0", "spec_version": "1.0"}}
 
     @staticmethod
@@ -253,9 +249,7 @@ def _calc_status(status: int) -> str:
 
 
 class _Instance:
-    """
-    The handler for one accepted connection.
-    """
+    """The handler for one accepted connection."""
 
     __slots__ = (
         "_application",
@@ -297,9 +291,7 @@ class _Instance:
         self._response_headers_sent: bool = False
 
     async def run(self: _Instance) -> None:
-        """
-        Run the application.
-        """
+        """Run the application."""
         # Receive the request line and headers from the SCGI client.
         environ: dict[str, bytes] | None = None
         while environ is None:
@@ -412,9 +404,7 @@ class _Instance:
         await self._application(scope, self._receive, self._send)
 
     async def _receive(self: _Instance) -> EventOrScope:
-        """
-        Receive the next event from the SCGI client to the application.
-        """
+        """Receive the next event from the SCGI client to the application."""
         if self._disconnected:
             # The connection has already disconnected.
             logging.getLogger(__name__).debug("receive called after disconnect")
@@ -488,18 +478,14 @@ class _Instance:
             raise ValueError(f"Unknown event type {event_type!r} passed to send")
 
     async def _read_chunk(self: _Instance) -> bytes:
-        """
-        Read the next chunk from the SCGI client.
-        """
+        """Read the next chunk from the SCGI client."""
         try:
             return await self._read_cb()
         except ConnectionResetError:
             return b""
 
     async def _send_headers(self: _Instance) -> None:
-        """
-        Send the headers to the SCGI client, if not already been sent.
-        """
+        """Send the headers to the SCGI client, if not already been sent."""
         if not self._response_headers_sent:
             # We must have some headers to send.
             if self._response_headers is None:
@@ -513,9 +499,7 @@ class _Instance:
             self._response_headers_sent = True
 
     async def _send_event(self: _Instance, event: sioscgi.Event, drain: bool) -> None:
-        """
-        Send an event to the SCGI client.
-        """
+        """Send an event to the SCGI client."""
         raw = self._conn.send(event)
         if (
             raw and not self._disconnected

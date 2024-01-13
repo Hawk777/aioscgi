@@ -1,6 +1,4 @@
-"""
-Tests the core module.
-"""
+"""Tests the core module."""
 
 from __future__ import annotations
 
@@ -53,9 +51,7 @@ def events_equal(event1: sioscgi.Event, event2: object) -> bool:
 
 
 class EventMatcher:
-    """
-    A matcher that compares sioscgi event objects by their contents.
-    """
+    """A matcher that compares sioscgi event objects by their contents."""
 
     __slots__ = ("_expected",)
 
@@ -106,15 +102,11 @@ async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
 
 
 class TestCore(TestCase):
-    """
-    Tests the core logic.
-    """
+    """Tests the core logic."""
 
     @patch("sioscgi.SCGIConnection")
     def test_simple(self: TestCore, conn_class: MagicMock) -> None:
-        """
-        Test a simple application.
-        """
+        """Test a simple application."""
 
         async def app(
             scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
@@ -198,9 +190,7 @@ class TestCore(TestCase):
 
     @patch("sioscgi.SCGIConnection")
     def test_multi_body(self: TestCore, conn_class: MagicMock) -> None:
-        """
-        Test request and response bodies transported in multiple parts.
-        """
+        """Test request and response bodies transported in multiple parts."""
 
         async def app(
             scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
@@ -366,9 +356,7 @@ class TestCore(TestCase):
 
     @patch("sioscgi.SCGIConnection")
     def test_disconnect_during_request(self: TestCore, conn_class: MagicMock) -> None:
-        """
-        Test a case where the client disconnects while sending the request.
-        """
+        """Test a case where the client disconnects while sending the request."""
 
         async def app(
             scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
@@ -437,9 +425,7 @@ class TestCore(TestCase):
 
     @patch("sioscgi.SCGIConnection")
     def test_https(self: TestCore, conn_class: MagicMock) -> None:
-        """
-        Test that an HTTPS request is recognized as such.
-        """
+        """Test that an HTTPS request is recognized as such."""
 
         async def app(
             scope: EventOrScope, receive: ReceiveFunction, send: SendFunction

@@ -33,18 +33,17 @@ async def _lifespan_coro(
         thus sent.
     """
 
-    # Wrap the send callable in an extra layer that validates the message
-    # before sending it.
+    # Wrap the send callable in an extra layer that validates the message before sending
+    # it.
     def send_wrapper(event: core.EventOrScope) -> Awaitable[None]:
         core.LifespanManager.check_application_event(event)
         return send(event)
 
-    # Run the application callback. If it returns normally, don’t do anything:
-    # while unlikely, it is theoretically possible that the application could
-    # have passed its send and receive callables over to another task which is
-    # now responsible for handling the lifespan protocol. However, if it
-    # returns by raising an exception, then send None, signalling to the
-    # LifespanManager that this happened.
+    # Run the application callback. If it returns normally, don’t do anything: while
+    # unlikely, it is theoretically possible that the application could have passed its
+    # send and receive callables over to another task which is now responsible for
+    # handling the lifespan protocol. However, if it returns by raising an exception,
+    # then send None, signalling to the LifespanManager that this happened.
     try:
         await application(lifespan_manager.scope, receive, send_wrapper)
     except Exception as exp:  # pylint: disable=broad-except
@@ -81,9 +80,9 @@ async def _connection_wrapper(
     client_connections.add(task)
     try:
         try:
-            # aioscgi.run expects callables to read a chunk and write a chunk,
-            # the latter taking a drain boolean; adapt the writing side to the
-            # stream model (the reader is handled with a functools.partial).
+            # aioscgi.run expects callables to read a chunk and write a chunk, the
+            # latter taking a drain boolean; adapt the writing side to the stream model
+            # (the reader is handled with a functools.partial).
             async def write_cb(data: bytes, drain: bool) -> None:
                 writer.write(data)
                 if drain:
@@ -106,8 +105,8 @@ async def _connection_wrapper(
                     writer.write_eof()
                 writer.close()
             except Exception:  # pylint: disable=broad-except
-                # If something went wrong while closing the connection, there’s
-                # nothing interesting to report.
+                # If something went wrong while closing the connection, there’s nothing
+                # interesting to report.
                 pass
     finally:
         # Remove this task from the set of open client connections.
@@ -134,10 +133,10 @@ async def _main_coroutine(
     # Get the event loop.
     loop = asyncio.get_event_loop()
 
-    # Create a future and arrange for it to be completed whenever SIGINT or
-    # SIGTERM is received, if on a platform supporting signals. On other
-    # platforms, just create the future but don’t ever set it, which causes an
-    # endless wait and non-graceful termination.
+    # Create a future and arrange for it to be completed whenever SIGINT or SIGTERM is
+    # received, if on a platform supporting signals. On other platforms, just create the
+    # future but don’t ever set it, which causes an endless wait and non-graceful
+    # termination.
     term_sig = loop.create_future()
     if hasattr(loop, "add_signal_handler"):
 
@@ -199,10 +198,10 @@ async def _main_coroutine(
             await srv.wait_closed()
             logging.getLogger(__name__).info("Server no longer listening")
 
-            # Wait until all the client connections finish. Each time a task
-            # finishes, it removes itself from the set, and we want to wait
-            # until they are all gone, so just wait for an arbitrary task over
-            # and over until the set is empty.
+            # Wait until all the client connections finish. Each time a task finishes,
+            # it removes itself from the set, and we want to wait until they are all
+            # gone, so just wait for an arbitrary task over and over until the set is
+            # empty.
             while client_connections:
                 await next(iter(client_connections))
             logging.getLogger(__name__).info("All client connections closed")
@@ -210,8 +209,8 @@ async def _main_coroutine(
             # Shut down the application.
             await lifespan_manager.shutdown()
     finally:
-        # Cancel all the running tasks except myself, thus allowing them to
-        # clean up properly.
+        # Cancel all the running tasks except myself, thus allowing them to clean up
+        # properly.
         logging.getLogger(__name__).debug("Terminating running tasks")
         all_tasks = asyncio.all_tasks(loop)
         for i in all_tasks:

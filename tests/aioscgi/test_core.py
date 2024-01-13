@@ -514,8 +514,7 @@ class TestCore(TestCase):
         Test that the lifespan protocol startup events work right for an
         application that supports the protocol and initializes successfully.
         """
-        # Create a mock queue and send and receive async callables that access
-        # it.
+        # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [{"type": "lifespan.startup.complete"}]
 
@@ -537,9 +536,8 @@ class TestCore(TestCase):
         with self.assertRaises(StopIteration):
             uut.startup().send(None)
 
-        # The lifespan manager should send the lifespan.startup event, then
-        # wait for the application to send the complete message before
-        # returning.
+        # The lifespan manager should send the lifespan.startup event, then wait for the
+        # application to send the complete message before returning.
         self.assertEqual(
             mock_queue.mock_calls,
             [call.send({"type": "lifespan.startup"}), call.receive()],
@@ -550,8 +548,7 @@ class TestCore(TestCase):
         Test that the lifespan protocol startup events work right for an
         application that supports the protocol but fails to initialize.
         """
-        # Create a mock queue and send and receive async callables that access
-        # it.
+        # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [
             {
@@ -574,17 +571,16 @@ class TestCore(TestCase):
         # At this point, nothing should have been done with the queue.
         self.assertFalse(mock_queue.mock_calls)
 
-        # Run the lifespan startup process. It should raise an exception,
-        # passing on the message from the application.
+        # Run the lifespan startup process. It should raise an exception, passing on the
+        # message from the application.
         with self.assertRaises(
             aioscgi.core.ApplicationInitializationError,
             msg="Application failure message",
         ):
             uut.startup().send(None)
 
-        # The lifespan manager should send the lifespan.startup event, then
-        # wait for the application to send the failure message before raising
-        # its own exception.
+        # The lifespan manager should send the lifespan.startup event, then wait for the
+        # application to send the failure message before raising its own exception.
         self.assertEqual(
             mock_queue.mock_calls,
             [call.send({"type": "lifespan.startup"}), call.receive()],
@@ -595,8 +591,7 @@ class TestCore(TestCase):
         Test that the lifespan protocol shutdown events work right for an
         application that supports the protocol and shuts down successfully.
         """
-        # Create a mock queue and send and receive async callables that access
-        # it.
+        # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [{"type": "lifespan.shutdown.complete"}]
 
@@ -618,9 +613,8 @@ class TestCore(TestCase):
         with self.assertRaises(StopIteration):
             uut.shutdown().send(None)
 
-        # The lifespan manager should send the lifespan.shutdown event, then
-        # wait for the application to send the complete message before
-        # returning.
+        # The lifespan manager should send the lifespan.shutdown event, then wait for
+        # the application to send the complete message before returning.
         self.assertEqual(
             mock_queue.mock_calls,
             [call.send({"type": "lifespan.shutdown"}), call.receive()],
@@ -631,8 +625,7 @@ class TestCore(TestCase):
         Test that the lifespan protocol shutdown events work right for an
         application that supports the protocol but fails to shut down.
         """
-        # Create a mock queue and send and receive async callables that access
-        # it.
+        # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [
             {
@@ -656,14 +649,13 @@ class TestCore(TestCase):
         self.assertFalse(mock_queue.mock_calls)
 
         # Run the lifespan shutdown process. It should return normally, because
-        # application failures during shutdown don’t really benefit from being
-        # reraised at the call site.
+        # application failures during shutdown don’t really benefit from being reraised
+        # at the call site.
         with self.assertRaises(StopIteration):
             uut.shutdown().send(None)
 
-        # The lifespan manager should send the lifespan.startup event, then
-        # wait for the application to send the failure message before raising
-        # its own exception.
+        # The lifespan manager should send the lifespan.startup event, then wait for the
+        # application to send the failure message before raising its own exception.
         self.assertEqual(
             mock_queue.mock_calls,
             [call.send({"type": "lifespan.shutdown"}), call.receive()],
@@ -674,8 +666,7 @@ class TestCore(TestCase):
         Test that the lifespan protocol works properly when the application
         doesn’t support it.
         """
-        # Create a mock queue and send and receive async callables that access
-        # it.
+        # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [None]
 
@@ -693,20 +684,19 @@ class TestCore(TestCase):
         # At this point, nothing should have been done with the queue.
         self.assertFalse(mock_queue.mock_calls)
 
-        # Run the lifespan startup process. It should return normally. Lack of
-        # support from the application should not be considered an error.
+        # Run the lifespan startup process. It should return normally. Lack of support
+        # from the application should not be considered an error.
         with self.assertRaises(StopIteration):
             uut.startup().send(None)
 
-        # Run the lifespan shutdown process. It should return normally, without
-        # doing anything, because of the earlier indication of no support.
+        # Run the lifespan shutdown process. It should return normally, without doing
+        # anything, because of the earlier indication of no support.
         with self.assertRaises(StopIteration):
             uut.shutdown().send(None)
 
-        # The lifespan manager should send the lifespan.startup event, then
-        # receive the indication of no support (representing the application
-        # callback raising an exception), then not interact with the queue
-        # again afterwards.
+        # The lifespan manager should send the lifespan.startup event, then receive the
+        # indication of no support (representing the application callback raising an
+        # exception), then not interact with the queue again afterwards.
         self.assertEqual(
             mock_queue.mock_calls,
             [call.send({"type": "lifespan.startup"}), call.receive()],

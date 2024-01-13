@@ -103,11 +103,10 @@ class LifespanManager:
             "LifespanManager received startup reply: %s", reply
         )
         if reply is None:
-            # The application coroutine terminated with an exception, which the
-            # I/O adapter encoded as a None in the receive queue. This means
-            # that the application does not support the lifespan protocol,
-            # which is totally fine and just means we should not send more
-            # lifespan message.
+            # The application coroutine terminated with an exception, which the I/O
+            # adapter encoded as a None in the receive queue. This means that the
+            # application does not support the lifespan protocol, which is totally fine
+            # and just means we should not send more lifespan message.
             self._unsupported = True
         else:
             reply_type = reply["type"]
@@ -137,13 +136,12 @@ class LifespanManager:
                 "LifespanManager received shutdown reply: %s", reply
             )
             if reply is None:
-                # The application coroutine terminated with an exception, which
-                # the I/O adapter encoded as a None in the receive queue. This
-                # means that the application does not support the lifespan
-                # protocol, which is totally fine and just means we should not
-                # send more lifespan message. Obviously we shouldn’t ever *try*
-                # to send another one, since we just finished shutdown, but
-                # just in case, remember the situation.
+                # The application coroutine terminated with an exception, which the I/O
+                # adapter encoded as a None in the receive queue. This means that the
+                # application does not support the lifespan protocol, which is totally
+                # fine and just means we should not send more lifespan message.
+                # Obviously we shouldn’t ever *try* to send another one, since we just
+                # finished shutdown, but just in case, remember the situation.
                 self._unsupported = True
             else:
                 reply_type = reply["type"]
@@ -151,8 +149,8 @@ class LifespanManager:
                     "lifespan.shutdown.complete",
                     "lifespan.shutdown.failed",
                 ):
-                    # The application has finished shutting down, successfully
-                    # or otherwise.
+                    # The application has finished shutting down, successfully or
+                    # otherwise.
                     pass
                 else:
                     raise ValueError(f"Unknown message type {reply_type!r}")
@@ -182,11 +180,10 @@ def _guess_scheme(environ: dict[str, bytes]) -> str:
     :param environ: The CGI environment dictionary.
     :returns: The guessed scheme.
     """
-    # wsgiref.util.guess_scheme will do the work for us, but it requires a
-    # dict[str, str], not a dict[str, bytes]. It works by looking for a key
-    # named “HTTPS” and examining its value. Rather than doing the work of
-    # decoding the entire environment dictionary to a dict[str, str], just
-    # decode only the HTTPS key if present.
+    # wsgiref.util.guess_scheme will do the work for us, but it requires a dict[str,
+    # str], not a dict[str, bytes]. It works by looking for a key named “HTTPS” and
+    # examining its value. Rather than doing the work of decoding the entire environment
+    # dictionary to a dict[str, str], just decode only the HTTPS key if present.
     https = environ.get("HTTPS")
     if https is None:
         return "http"
@@ -303,22 +300,22 @@ class _Instance:
                     # EOF before headers are finished. Abandon the request.
                     return
             else:
-                # Got a complete event. The first received event should be
-                # the request headers.
+                # Got a complete event. The first received event should be the request
+                # headers.
                 assert isinstance(event, sioscgi.RequestHeaders)
                 environ = event.environment
 
-        # Uppercase keys in the environment (the CGI specification states that
-        # they are case-insensitive, and this makes subsequent code easier).
+        # Uppercase keys in the environment (the CGI specification states that they are
+        # case-insensitive, and this makes subsequent code easier).
         environ = {k.upper(): v for k, v in environ.items()}
 
         # Figure out paths.
         if self._base_uri is not None:
-            # A base path was given explicitly. The request URI must begin with
-            # the base path (otherwise the request cannot be handled), and
-            # root_path should be the given base path while path should be the
-            # remainder of the request URI. This form is useful for HTTP
-            # servers that don’t set SCRIPT_NAME and PATH_INFO properly.
+            # A base path was given explicitly. The request URI must begin with the base
+            # path (otherwise the request cannot be handled), and root_path should be
+            # the given base path while path should be the remainder of the request URI.
+            # This form is useful for HTTP servers that don’t set SCRIPT_NAME and
+            # PATH_INFO properly.
             request_uri = environ["REQUEST_URI"]
             try:
                 request_uri_str = request_uri.decode("UTF-8")
@@ -337,11 +334,10 @@ class _Instance:
             root_path = self._base_uri
             path = request_uri_str[len(root_path) :]
         else:
-            # No base path was given. The HTTP server is to be trusted to break
-            # down the request into a part designating the application (called
-            # SCRIPT_NAME in CGI and root_path in ASGI) and a part designating
-            # an entity within the application (called PATH_INFO in CGI and
-            # path in ASGI).
+            # No base path was given. The HTTP server is to be trusted to break down the
+            # request into a part designating the application (called SCRIPT_NAME in CGI
+            # and root_path in ASGI) and a part designating an entity within the
+            # application (called PATH_INFO in CGI and path in ASGI).
             script_name = environ["SCRIPT_NAME"]
             try:
                 root_path = script_name.decode("UTF-8")
@@ -409,11 +405,11 @@ class _Instance:
             logging.getLogger(__name__).debug("receive called after disconnect")
             return {"type": "http.disconnect"}
         if self._request_ended:
-            # Asking for another event after the request body is complete can
-            # only mean one thing: wait for the connection to close and return
-            # http.disconnect. This might be useful as part of a wait-for-any
-            # scheme where the application wants to wait for either some
-            # external event or the client to disconnect, for long polling.
+            # Asking for another event after the request body is complete can only mean
+            # one thing: wait for the connection to close and return http.disconnect.
+            # This might be useful as part of a wait-for-any scheme where the
+            # application wants to wait for either some external event or the client to
+            # disconnect, for long polling.
             logging.getLogger(__name__).debug(
                 "receive called after end of request: wait for disconnect"
             )
@@ -490,9 +486,9 @@ class _Instance:
             if self._response_headers is None:
                 raise ValueError("http.response.start never sent")
 
-            # Send the headers, but don’t drain the connection; allow the I/O
-            # layer to optimize by concatenating the headers and the first body
-            # chunk into a single OS call if it wishes.
+            # Send the headers, but don’t drain the connection; allow the I/O layer to
+            # optimize by concatenating the headers and the first body chunk into a
+            # single OS call if it wishes.
             await self._send_event(self._response_headers, False)
 
             self._response_headers_sent = True

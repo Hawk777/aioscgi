@@ -90,7 +90,8 @@ class LifespanManager:
             "lifespan.shutdown.complete",
             "lifespan.shutdown.failed",
         ):
-            raise ValueError(f"Unknown event type {event_type!r}")
+            msg = f"Unknown event type {event_type!r}"
+            raise ValueError(msg)
 
     async def startup(self: LifespanManager) -> None:
         """
@@ -119,7 +120,8 @@ class LifespanManager:
                 # The application failed to initialize.
                 raise ApplicationInitializationError(reply.get("message", ""))
             else:
-                raise ValueError(f"Unknown message type {reply_type!r}")
+                msg = f"Unknown message type {reply_type!r}"
+                raise ValueError(msg)
 
     async def shutdown(self: LifespanManager) -> None:
         """
@@ -155,7 +157,8 @@ class LifespanManager:
                     # otherwise.
                     pass
                 else:
-                    raise ValueError(f"Unknown message type {reply_type!r}")
+                    msg = f"Unknown message type {reply_type!r}"
+                    raise ValueError(msg)
 
 
 def _calc_http_version(server_protocol: bytes) -> str:
@@ -170,7 +173,8 @@ def _calc_http_version(server_protocol: bytes) -> str:
         return server_protocol_str[len("HTTP/") :]
     if server_protocol == b"INCLUDED":
         return "1.0"
-    raise ValueError(f"Unrecognized HTTP protocol version {server_protocol_str}")
+    msg = f"Unrecognized HTTP protocol version {server_protocol_str}"
+    raise ValueError(msg)
 
 
 def _guess_scheme(environ: dict[str, bytes]) -> str:
@@ -467,7 +471,8 @@ class _Instance:
             if not event.get("more_body", False):
                 await self._send_event(sioscgi.ResponseEnd(), drain=True)
         else:
-            raise ValueError(f"Unknown event type {event_type!r} passed to send")
+            msg = f"Unknown event type {event_type!r} passed to send"
+            raise ValueError(msg)
 
     async def _read_chunk(self: _Instance) -> bytes:
         """Read the next chunk from the SCGI client."""
@@ -481,7 +486,8 @@ class _Instance:
         if not self._response_headers_sent:
             # We must have some headers to send.
             if self._response_headers is None:
-                raise ValueError("http.response.start never sent")
+                msg = "http.response.start never sent"
+                raise ValueError(msg)
 
             # Send the headers, but don’t drain the connection; allow the I/O layer to
             # optimize by concatenating the headers and the first body chunk into a

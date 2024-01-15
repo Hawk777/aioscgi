@@ -87,7 +87,8 @@ async def _unusable_read_cb() -> bytes:
     not be invoked (for example, because the SCGIConnection is mocked to return events
     immediately without asking for any data).
     """
-    raise NotImplementedError("This callback should not be called")
+    msg = "This callback should not be called"
+    raise NotImplementedError(msg)
 
 
 async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
@@ -98,7 +99,8 @@ async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
     should not be invoked (for example, because the SCGIConnection is mocked to store
     the pushed events rather than encoding them into bytes and sending them).
     """
-    raise NotImplementedError("This callback should not be called")
+    msg = "This callback should not be called"
+    raise NotImplementedError(msg)
 
 
 class TestCore(TestCase):
@@ -112,7 +114,8 @@ class TestCore(TestCase):
             scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
         ) -> None:
             if scope["type"] == "lifespan":
-                raise ValueError("Lifespan protocol not supported by this application")
+                msg = "Lifespan protocol not supported by this application"
+                raise ValueError(msg)
 
             self.assertEqual(scope["type"], "http")
             assert isinstance(scope["asgi"], dict)
@@ -196,7 +199,8 @@ class TestCore(TestCase):
             scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
         ) -> None:
             if scope["type"] == "lifespan":
-                raise ValueError("Lifespan protocol not supported by this application")
+                msg = "Lifespan protocol not supported by this application"
+                raise ValueError(msg)
 
             self.assertEqual(scope["type"], "http")
             assert isinstance(scope["asgi"], dict)
@@ -297,7 +301,8 @@ class TestCore(TestCase):
             scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
         ) -> None:
             if scope["type"] == "lifespan":
-                raise ValueError("Lifespan protocol not supported by this application")
+                msg = "Lifespan protocol not supported by this application"
+                raise ValueError(msg)
 
             self.assertEqual(scope["type"], "http")
             assert isinstance(scope["asgi"], dict)
@@ -359,7 +364,8 @@ class TestCore(TestCase):
             scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
         ) -> None:
             if scope["type"] == "lifespan":
-                raise ValueError("Lifespan protocol not supported by this application")
+                msg = "Lifespan protocol not supported by this application"
+                raise ValueError(msg)
 
             self.assertEqual(scope["type"], "http")
             assert isinstance(scope["asgi"], dict)
@@ -428,7 +434,8 @@ class TestCore(TestCase):
             scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
         ) -> None:
             if scope["type"] == "lifespan":
-                raise ValueError("Lifespan protocol not supported by this application")
+                msg = "Lifespan protocol not supported by this application"
+                raise ValueError(msg)
 
             self.assertEqual(scope["type"], "http")
             assert isinstance(scope["asgi"], dict)

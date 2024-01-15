@@ -167,10 +167,9 @@ def _calc_http_version(server_protocol: bytes) -> str:
     server_protocol_str = server_protocol.decode("UTF-8").upper()
     if server_protocol_str.startswith("HTTP/"):
         return server_protocol_str[len("HTTP/") :]
-    elif server_protocol == b"INCLUDED":
+    if server_protocol == b"INCLUDED":
         return "1.0"
-    else:
-        raise ValueError(f"Unrecognized HTTP protocol version {server_protocol_str}")
+    raise ValueError(f"Unrecognized HTTP protocol version {server_protocol_str}")
 
 
 def _guess_scheme(environ: dict[str, bytes]) -> str:
@@ -187,8 +186,7 @@ def _guess_scheme(environ: dict[str, bytes]) -> str:
     https = environ.get("HTTPS")
     if https is None:
         return "http"
-    else:
-        return wsgiref.util.guess_scheme({"HTTPS": https.decode("ISO-8859-1")})
+    return wsgiref.util.guess_scheme({"HTTPS": https.decode("ISO-8859-1")})
 
 
 def _calc_http_headers(environ: dict[str, bytes]) -> list[list[bytes]]:
@@ -436,18 +434,16 @@ class _Instance:
                         "body": event.data,
                         "more_body": True,
                     }
-                else:
-                    self._request_ended = True
-                    return {"type": "http.request"}
-            else:
-                # No more events available. Read bytes from the SCGI socket.
-                raw = await self._read_chunk()
-                self._conn.receive_data(raw)
-                if not raw:
-                    self._request_ended = True
-                    self._disconnected = True
-                    logging.getLogger(__name__).debug("Premature EOF on SCGI socket")
-                    return {"type": "http.disconnect"}
+                self._request_ended = True
+                return {"type": "http.request"}
+            # No more events available. Read bytes from the SCGI socket.
+            raw = await self._read_chunk()
+            self._conn.receive_data(raw)
+            if not raw:
+                self._request_ended = True
+                self._disconnected = True
+                logging.getLogger(__name__).debug("Premature EOF on SCGI socket")
+                return {"type": "http.disconnect"}
 
     async def _send(self: _Instance, event: EventOrScope) -> None:
         event_type = event["type"]

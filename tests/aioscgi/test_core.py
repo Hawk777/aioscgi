@@ -23,7 +23,7 @@ def events_equal(event1: sioscgi.Event, event2: object) -> bool:
     """
     if type(event1) is not type(event2):
         return False
-    elif isinstance(
+    if not isinstance(
         event1,
         sioscgi.RequestHeaders
         | sioscgi.RequestBody
@@ -32,22 +32,21 @@ def events_equal(event1: sioscgi.Event, event2: object) -> bool:
         | sioscgi.ResponseBody
         | sioscgi.ResponseEnd,
     ):
-        slots = event1.__slots__
-        if isinstance(slots, str):
-            slots = (slots,)
-        for k in slots:
-            event1_value = getattr(event1, k)
-            event2_value = getattr(event2, k)
-            if type(event1_value) is not type(event2_value):
-                return False
-            elif isinstance(event1_value, wsgiref.headers.Headers):
-                if event1_value.items() != event2_value.items():
-                    return False
-            elif event1_value != event2_value:
-                return False
-        return True
-    else:
         raise ValueError("Only applicable to sioscgi events.")
+    slots = event1.__slots__
+    if isinstance(slots, str):
+        slots = (slots,)
+    for k in slots:
+        event1_value = getattr(event1, k)
+        event2_value = getattr(event2, k)
+        if type(event1_value) is not type(event2_value):
+            return False
+        if isinstance(event1_value, wsgiref.headers.Headers):
+            if event1_value.items() != event2_value.items():
+                return False
+        elif event1_value != event2_value:
+            return False
+    return True
 
 
 class EventMatcher:

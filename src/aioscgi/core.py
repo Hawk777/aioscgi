@@ -36,8 +36,8 @@ ApplicationType = Callable[
 
 class ApplicationInitializationError(Exception):
     """
-    Raised if the application uses the lifespan protocol to initialize itself
-    and reports failure during initialization.
+    Raised if the application uses the lifespan protocol to initialize itself and
+    reports failure during initialization.
     """
 
     __slots__ = ()
@@ -56,13 +56,13 @@ class LifespanManager:
         """
         Construct a new LifespanManager.
 
-        :param send: A coroutine which, when invoked, queues the passed-in
-            event so that it can be received by the application coroutine
-            instance running the lifespan protocol.
-        :param receive: A coroutine which, when invoked, waits until the
-            application coroutine instance running the lifespan protocol sends
-            an event, then returns that event, or None if the application
-            coroutine terminates with an exception.
+        :param send: A coroutine which, when invoked, queues the passed-in event so that
+            it can be received by the application coroutine instance running the
+            lifespan protocol.
+        :param receive: A coroutine which, when invoked, waits until the application
+            coroutine instance running the lifespan protocol sends an event, then
+            returns that event, or None if the application coroutine terminates with an
+            exception.
         """
         self._send: SendFunction = send
         self._receive: Callable[[], Awaitable[EventOrScope | None]] = receive
@@ -93,8 +93,7 @@ class LifespanManager:
         """
         Perform the application startup process.
 
-        :raises ApplicationInitializationError: if the application fails to
-            initialize
+        :raises ApplicationInitializationError: if the application fails to initialize
         """
         logging.getLogger(__name__).debug("LifespanManager sending startup message")
         await self._send({"type": "lifespan.startup"})
@@ -123,8 +122,8 @@ class LifespanManager:
         """
         Perform the application shutdown process.
 
-        Failures are not reported to the caller, because failures during
-        shutdown don’t really mean anything.
+        Failures are not reported to the caller, because failures during shutdown don’t
+        really mean anything.
         """
         if not self._unsupported:
             logging.getLogger(__name__).debug(
@@ -158,8 +157,7 @@ class LifespanManager:
 
 def _calc_http_version(server_protocol: bytes) -> str:
     """
-    Convert an HTTP_PROTOCOL environment value into an HTTP protocol version
-    string.
+    Convert an HTTP_PROTOCOL environment value into an HTTP protocol version string.
 
     :param server_protocol: The value of the CGI ``SERVER_PROTOCOL`` variable.
     :returns: The HTTP version in use.
@@ -194,8 +192,8 @@ def _calc_http_headers(environ: dict[str, bytes]) -> list[list[bytes]]:
     Extract the HTTP headers from the environment dictionary.
 
     :param environ: The CGI environment dictionary.
-    :returns: The HTTP headers as a list of two-element lists of bytes,
-        suitable for passing to an ASGI application.
+    :returns: The HTTP headers as a list of two-element lists of bytes, suitable for
+        passing to an ASGI application.
     """
     return [
         [k.replace("HTTP_", "", 1).replace("_", "-").lower().encode("ISO-8859-1"), v]
@@ -213,8 +211,8 @@ def _calc_client(environ: dict[str, bytes]) -> list[Any] | None:
     Generate the ``client`` key for the ASGI scope.
 
     :param environ: The CGI environment dictionary.
-    :returns: A two-element list of client hostname and port number, or
-        ``None`` if the information is not available.
+    :returns: A two-element list of client hostname and port number, or ``None`` if the
+        information is not available.
     """
     addr = environ.get("REMOTE_ADDR")
     port = environ.get("REMOTE_PORT")  # Nonstandard, but may exist
@@ -270,9 +268,9 @@ class _Instance:
         :param application: The application callable.
         :param read_cb: The read-from-client callable.
         :param write_cb: The write-to-client callable.
-        :param base_uri: The request URI prefix to the base of the application
-            for computing root_path and path, or None to use SCRIPT_NAME and
-            PATH_INFO instead.
+        :param base_uri: The request URI prefix to the base of the application for
+            computing root_path and path, or None to use SCRIPT_NAME and PATH_INFO
+            instead.
         """
         self._application: ApplicationType = application
         self._read_cb: Callable[[], Awaitable[bytes]] = read_cb
@@ -512,9 +510,9 @@ class Container:
         """
         Construct a new ASGI container.
 
-        :param base_uri: The request URI prefix to the base of the application
-            for computing root_path and path, or None to use SCRIPT_NAME and
-            PATH_INFO instead.
+        :param base_uri: The request URI prefix to the base of the application for
+            computing root_path and path, or None to use SCRIPT_NAME and PATH_INFO
+            instead.
         """
         self._base_uri: str | None = base_uri
 
@@ -529,17 +527,17 @@ class Container:
 
         Any exceptions raised by application are propagated to the caller.
 
-        The caller is expected to close the connection to the SCGI client after
-        this function returns.
+        The caller is expected to close the connection to the SCGI client after this
+        function returns.
 
         :param application: The application callable.
-        :param read_cb: A coroutine which accepts no parameters and, when
-            called, returns a bytes received from the SCGI client, or an empty
-            bytes if the SCGI client has closed the connection.
-        :param write_cb: A coroutine which accepts a bytes and a bool as a
-            parameter and, when called, sends the bytes to the SCGI client; the
-            bool is a hint indicating whether the coroutine should wait until the
-            bytes have been sent before returning.
+        :param read_cb: A coroutine which accepts no parameters and, when called,
+            returns a bytes received from the SCGI client, or an empty bytes if the SCGI
+            client has closed the connection.
+        :param write_cb: A coroutine which accepts a bytes and a bool as a parameter
+            and, when called, sends the bytes to the SCGI client; the bool is a hint
+            indicating whether the coroutine should wait until the bytes have been sent
+            before returning.
         """
         i = _Instance(application, read_cb, write_cb, self._base_uri)
         return i.run()

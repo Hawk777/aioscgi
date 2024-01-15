@@ -83,9 +83,9 @@ async def _unusable_read_cb() -> bytes:
     """
     Fail when called.
 
-    This function can be used as a read callback in tests where the read
-    callback should not be invoked (for example, because the SCGIConnection is
-    mocked to return events immediately without asking for any data).
+    This function can be used as a read callback in tests where the read callback should
+    not be invoked (for example, because the SCGIConnection is mocked to return events
+    immediately without asking for any data).
     """
     raise NotImplementedError("This callback should not be called")
 
@@ -94,10 +94,9 @@ async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
     """
     Fail when called.
 
-    This function can be used as a write callback in tests where the write
-    callback should not be invoked (for example, because the SCGIConnection is
-    mocked to store the pushed events rather than encoding them into bytes and
-    sending them).
+    This function can be used as a write callback in tests where the write callback
+    should not be invoked (for example, because the SCGIConnection is mocked to store
+    the pushed events rather than encoding them into bytes and sending them).
     """
     raise NotImplementedError("This callback should not be called")
 
@@ -293,8 +292,8 @@ class TestCore(TestCase):
     @patch("sioscgi.SCGIConnection")
     def test_disconnect_after_request(self: TestCore, conn_class: MagicMock) -> None:
         """
-        Test a long polling type of application where the client disconnects
-        before the response body is sent.
+        Test a long polling type of application where the client disconnects before the
+        response body is sent.
         """
 
         async def app(
@@ -512,8 +511,8 @@ class TestCore(TestCase):
 
     def test_lifespan_startup_successful(self: TestCore) -> None:
         """
-        Test that the lifespan protocol startup events work right for an
-        application that supports the protocol and initializes successfully.
+        Test that the lifespan protocol startup events work right for an application
+        that supports the protocol and initializes successfully.
         """
         # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
@@ -546,8 +545,8 @@ class TestCore(TestCase):
 
     def test_lifespan_startup_failed(self: TestCore) -> None:
         """
-        Test that the lifespan protocol startup events work right for an
-        application that supports the protocol but fails to initialize.
+        Test that the lifespan protocol startup events work right for an application
+        that supports the protocol but fails to initialize.
         """
         # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
@@ -589,8 +588,8 @@ class TestCore(TestCase):
 
     def test_lifespan_shutdown_successful(self: TestCore) -> None:
         """
-        Test that the lifespan protocol shutdown events work right for an
-        application that supports the protocol and shuts down successfully.
+        Test that the lifespan protocol shutdown events work right for an application
+        that supports the protocol and shuts down successfully.
         """
         # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
@@ -623,8 +622,8 @@ class TestCore(TestCase):
 
     def test_lifespan_shutdown_failed(self: TestCore) -> None:
         """
-        Test that the lifespan protocol shutdown events work right for an
-        application that supports the protocol but fails to shut down.
+        Test that the lifespan protocol shutdown events work right for an application
+        that supports the protocol but fails to shut down.
         """
         # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
@@ -664,8 +663,8 @@ class TestCore(TestCase):
 
     def test_lifespan_not_supported(self: TestCore) -> None:
         """
-        Test that the lifespan protocol works properly when the application
-        doesn’t support it.
+        Test that the lifespan protocol works properly when the application doesn’t
+        support it.
         """
         # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()

@@ -27,11 +27,10 @@ async def _lifespan_coro(
 
     :param application: The application coroutine.
     :param lifespan_manager: The lifespan manager to interact with.
-    :param send: A coroutine that, when invoked, sends a value somewhere where
-        the LifespanManager’s receive callback can receive it.
-    :param receive: A coroutine that, when invoked, waits until the
-        LifespanManager’s send callback is invoked and then returns the value
-        thus sent.
+    :param send: A coroutine that, when invoked, sends a value somewhere where the
+        LifespanManager’s receive callback can receive it.
+    :param receive: A coroutine that, when invoked, waits until the LifespanManager’s
+        send callback is invoked and then returns the value thus sent.
     """
 
     # Wrap the send callable in an extra layer that validates the message before sending
@@ -64,13 +63,13 @@ async def _connection_wrapper(
     """
     Run an ASGI application in an asyncio server.
 
-    This function is suitable for passing to ``start_server`` or
-    ``start_unix_server``, with the ``application`` and ``client_connections``
-    parameters bound via a ``functools.partial`` or similar.
+    This function is suitable for passing to ``start_server`` or ``start_unix_server``,
+    with the ``application`` and ``client_connections`` parameters bound via a
+    ``functools.partial`` or similar.
 
     :param application: The ASGI application.
-    :param client_connections: A set of Task objects, to which this connection
-        is added on entry to and removed on exit from this function.
+    :param client_connections: A set of Task objects, to which this connection is added
+        on entry to and removed on exit from this function.
     :param container: The ASGI container to use.
     :param reader: The stream reader for the connection.
     :param writer: The stream writer for the connection.
@@ -124,11 +123,9 @@ async def _main_coroutine(
     Run the application in an asyncio event loop.
 
     :param application: The application callable.
-    :param start_server_fn: Either asyncio.start_server or
-        asyncio.start_unix_server, with server-type-specific parameters bound
-        via functools.partial.
-    :param after_listen_cb: The function to call after the server is up and
-        running.
+    :param start_server_fn: Either asyncio.start_server or asyncio.start_unix_server,
+        with server-type-specific parameters bound via functools.partial.
+    :param after_listen_cb: The function to call after the server is up and running.
     :param container: The ASGI container to use.
     """
     # Get the event loop.
@@ -262,10 +259,10 @@ def run_unix(
     Run an application listening for SCGI connections on a UNIX socket.
 
     The socket always has file mode 666. It is not really possible to create a
-    UNIX-domain socket with more restrictive permissions from the outset (other
-    than perhaps by using umask, which is not thread-safe), and creating it
-    with a more permissive mode and then chmodding it afterward leaves an
-    undesirable race condition.
+    UNIX-domain socket with more restrictive permissions from the outset (other than
+    perhaps by using umask, which is not thread-safe), and creating it with a more
+    permissive mode and then chmodding it afterward leaves an undesirable race
+    condition.
 
     :param application: The application callable.
     :param path: The filename of the socket to listen on.

@@ -36,8 +36,11 @@ ApplicationType = Callable[
 
 class ApplicationInitializationError(Exception):
     """
-    Raised if the application uses the lifespan protocol to initialize itself and
-    reports failure during initialization.
+    Raised if the application fails during lifespan startup.
+
+    This covers the case where the application replies to the lifespan startup event
+    with a lifespan startup failed event. It is not used if the application raises an
+    exception during lifespan startup.
     """
 
     __slots__ = ()

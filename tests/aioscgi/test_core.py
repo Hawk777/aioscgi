@@ -291,10 +291,7 @@ class TestCore(TestCase):
 
     @patch("sioscgi.SCGIConnection")
     def test_disconnect_after_request(self: TestCore, conn_class: MagicMock) -> None:
-        """
-        Test a long polling type of application where the client disconnects before the
-        response body is sent.
-        """
+        """Test a long polling client disconnecting before the response body is sent."""
 
         async def app(
             scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
@@ -510,10 +507,7 @@ class TestCore(TestCase):
         )
 
     def test_lifespan_startup_successful(self: TestCore) -> None:
-        """
-        Test that the lifespan protocol startup events work right for an application
-        that supports the protocol and initializes successfully.
-        """
+        """Test successful application startup using the lifespan protocol."""
         # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [{"type": "lifespan.startup.complete"}]
@@ -544,10 +538,7 @@ class TestCore(TestCase):
         )
 
     def test_lifespan_startup_failed(self: TestCore) -> None:
-        """
-        Test that the lifespan protocol startup events work right for an application
-        that supports the protocol but fails to initialize.
-        """
+        """Test failed application startup using the lifespan protocol."""
         # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [
@@ -587,10 +578,7 @@ class TestCore(TestCase):
         )
 
     def test_lifespan_shutdown_successful(self: TestCore) -> None:
-        """
-        Test that the lifespan protocol shutdown events work right for an application
-        that supports the protocol and shuts down successfully.
-        """
+        """Test successful application shutdown using the lifespan protocol."""
         # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [{"type": "lifespan.shutdown.complete"}]
@@ -621,10 +609,7 @@ class TestCore(TestCase):
         )
 
     def test_lifespan_shutdown_failed(self: TestCore) -> None:
-        """
-        Test that the lifespan protocol shutdown events work right for an application
-        that supports the protocol but fails to shut down.
-        """
+        """Test failed application shutdown using the lifespan protocol."""
         # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [
@@ -662,10 +647,7 @@ class TestCore(TestCase):
         )
 
     def test_lifespan_not_supported(self: TestCore) -> None:
-        """
-        Test that the lifespan protocol works properly when the application doesn’t
-        support it.
-        """
+        """Test an application not supporting the lifespan protocol."""
         # Create a mock queue and send and receive async callables that access it.
         mock_queue = MagicMock()
         mock_queue.receive.side_effect = [None]

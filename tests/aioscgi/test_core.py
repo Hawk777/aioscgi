@@ -71,9 +71,11 @@ class EventMatcher:
         return events_equal(self._expected, actual)
 
     def __str__(self: EventMatcher) -> str:
+        """Return the representation of the expected event."""
         return str(self._expected)
 
     def __repr__(self: EventMatcher) -> str:
+        """Return the representation of the expected event."""
         return repr(self._expected)
 
 

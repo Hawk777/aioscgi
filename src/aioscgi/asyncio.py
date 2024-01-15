@@ -163,7 +163,7 @@ async def _main_coroutine(
     lifespan_manager = core.LifespanManager(
         lifespan_framework_to_app_queue.put, lifespan_app_to_framework_queue.get
     )
-    asyncio.ensure_future(
+    lifespan_future = asyncio.ensure_future(
         _lifespan_coro(
             application,
             lifespan_manager,
@@ -208,6 +208,7 @@ async def _main_coroutine(
         finally:
             # Shut down the application.
             await lifespan_manager.shutdown()
+            await lifespan_future
     finally:
         # Cancel all the running tasks except myself, thus allowing them to clean up
         # properly.

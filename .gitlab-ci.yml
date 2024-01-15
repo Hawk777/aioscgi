@@ -8,14 +8,19 @@
     key: "mypy"
   script:
     - python -m pip install --disable-pip-version-check . types-setuptools
-    - mypy --strict src
+    - mypy --strict src tests
 
-"pycodestyle":
+"Ruff":
   image:
-    name: "cytopia/pycodestyle:latest"
+    name: "pipelinecomponents/ruff:0.10.0"
     entrypoint: [""]
   script:
-    - pycodestyle
+    - ruff format --check --diff
+    - ruff check --output-format=gitlab > ruff-gitlab.json
+  artifacts:
+    reports:
+      codequality:
+        - ruff-gitlab.json
 
 "Pylint":
   image:

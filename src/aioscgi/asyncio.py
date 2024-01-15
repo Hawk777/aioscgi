@@ -1,67 +1,75 @@
-"""
-An I/O adapter connecting aioscgi to the Python standard library asyncio.
-"""
+"""An I/O adapter connecting aioscgi to the Python standard library asyncio."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
+import contextlib
 import functools
 import io
 import logging
 import os
 import signal
-from typing import Any, Optional
+from collections.abc import Awaitable, Callable
 
 from . import core
 
 
 def _do_nothing() -> None:
-    """
-    Do nothing.
-    """
+    """Do nothing."""
 
 
-async def _lifespan_coro(application: core.ApplicationType, lifespan_manager: core.LifespanManager, send: Callable[[Optional[core.EventOrScope]], Awaitable[None]], receive: Callable[[], Awaitable[core.EventOrScope]]) -> None:
+async def _lifespan_coro(
+    application: core.ApplicationType,
+    lifespan_manager: core.LifespanManager,
+    send: Callable[[core.EventOrScope | None], Awaitable[None]],
+    receive: Callable[[], Awaitable[core.EventOrScope]],
+) -> None:
     """
     Wrap the application coroutine for delivering lifespan protocol events.
 
     :param application: The application coroutine.
     :param lifespan_manager: The lifespan manager to interact with.
-    :param send: A coroutine that, when invoked, sends a value somewhere where
-        the LifespanManager’s receive callback can receive it.
-    :param receive: A coroutine that, when invoked, waits until the
-        LifespanManager’s send callback is invoked and then returns the value
-        thus sent.
+    :param send: A coroutine that, when invoked, sends a value somewhere where the
+        LifespanManager’s receive callback can receive it.
+    :param receive: A coroutine that, when invoked, waits until the LifespanManager’s
+        send callback is invoked and then returns the value thus sent.
     """
-    # Wrap the send callable in an extra layer that validates the message
-    # before sending it.
+
+    # Wrap the send callable in an extra layer that validates the message before sending
+    # it.
     def send_wrapper(event: core.EventOrScope) -> Awaitable[None]:
         core.LifespanManager.check_application_event(event)
         return send(event)
 
-    # Run the application callback. If it returns normally, don’t do anything:
-    # while unlikely, it is theoretically possible that the application could
-    # have passed its send and receive callables over to another task which is
-    # now responsible for handling the lifespan protocol. However, if it
-    # returns by raising an exception, then send None, signalling to the
-    # LifespanManager that this happened.
+    # Run the application callback. If it returns normally, don’t do anything: while
+    # unlikely, it is theoretically possible that the application could have passed its
+    # send and receive callables over to another task which is now responsible for
+    # handling the lifespan protocol. However, if it returns by raising an exception,
+    # then send None, signalling to the LifespanManager that this happened.
     try:
         await application(lifespan_manager.scope, receive, send_wrapper)
-    except Exception as exp:  # pylint: disable=broad-except
-        logging.getLogger(__name__).debug("Application coroutine raised exception %s for lifespan protocol", exp)
+    except Exception as exp:  # pylint: disable=broad-except # noqa: BLE001
+        logging.getLogger(__name__).debug(
+            "Application coroutine raised exception %s for lifespan protocol", exp
+        )
         await send(None)
 
 
-async def _connection_wrapper(application: core.ApplicationType, client_connections: set[asyncio.Task[None]], container: core.Container, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+async def _connection_wrapper(
+    application: core.ApplicationType,
+    client_connections: set[asyncio.Task[None]],
+    container: core.Container,
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+) -> None:
     """
     Run an ASGI application in an asyncio server.
 
-    This function is suitable for passing to ``start_server`` or
-    ``start_unix_server``, with the ``application`` and ``client_connections``
-    parameters bound via a ``functools.partial`` or similar.
+    This function is suitable for passing to ``start_server`` or ``start_unix_server``,
+    with the ``application`` and ``client_connections`` parameters bound via a
+    ``functools.partial`` or similar.
 
     :param application: The ASGI application.
-    :param client_connections: A set of Task objects, to which this connection
-        is added on entry to and removed on exit from this function.
+    :param client_connections: A set of Task objects, to which this connection is added
+        on entry to and removed on exit from this function.
     :param container: The ASGI container to use.
     :param reader: The stream reader for the connection.
     :param writer: The stream writer for the connection.
@@ -72,71 +80,94 @@ async def _connection_wrapper(application: core.ApplicationType, client_connecti
     client_connections.add(task)
     try:
         try:
-            # aioscgi.run expects callables to read a chunk and write a chunk,
-            # the latter taking a drain boolean; adapt the writing side to the
-            # stream model (the reader is handled with a functools.partial).
+            # aioscgi.run expects callables to read a chunk and write a chunk, the
+            # latter taking a drain boolean; adapt the writing side to the stream model
+            # (the reader is handled with a functools.partial).
             async def write_cb(data: bytes, drain: bool) -> None:
                 writer.write(data)
                 if drain:
                     await writer.drain()
+
             # Run the application.
-            await container.run(application, functools.partial(reader.read, io.DEFAULT_BUFFER_SIZE), write_cb)
-        except Exception:  # pylint: disable=broad-except
-            logging.getLogger(__name__).error("Uncaught exception in application callable", exc_info=True)
+            await container.run(
+                application,
+                functools.partial(reader.read, io.DEFAULT_BUFFER_SIZE),
+                write_cb,
+            )
+        except Exception:  # pylint: disable=broad-except # noqa: BLE001
+            logging.getLogger(__name__).error(
+                "Uncaught exception in application callable", exc_info=True
+            )
         finally:
             # Close the connection.
             try:
                 if writer.can_write_eof():
                     writer.write_eof()
                 writer.close()
-            except Exception:  # pylint: disable=broad-except
-                # If something went wrong while closing the connection, there’s
-                # nothing interesting to report.
+            except Exception:  # pylint: disable=broad-except # noqa: BLE001
+                # If something went wrong while closing the connection, there’s nothing
+                # interesting to report.
                 pass
     finally:
         # Remove this task from the set of open client connections.
         client_connections.remove(task)
 
 
-async def _main_coroutine(application: core.ApplicationType, start_server_fn: Callable[..., Awaitable[Any]], after_listen_cb: Callable[[], None], container: core.Container) -> None:
+async def _main_coroutine(
+    application: core.ApplicationType,
+    start_server_fn: Callable[..., Awaitable[asyncio.Server]],
+    after_listen_cb: Callable[[], None],
+    container: core.Container,
+) -> None:
     """
-    The top-level coroutine.
+    Run the application in an asyncio event loop.
 
     :param application: The application callable.
-    :param start_server_fn: Either asyncio.start_server or
-        asyncio.start_unix_server, with server-type-specific parameters bound
-        via functools.partial.
-    :param after_listen_cb: The function to call after the server is up and
-        running.
+    :param start_server_fn: Either asyncio.start_server or asyncio.start_unix_server,
+        with server-type-specific parameters bound via functools.partial.
+    :param after_listen_cb: The function to call after the server is up and running.
     :param container: The ASGI container to use.
     """
     # Get the event loop.
     loop = asyncio.get_event_loop()
 
-    # Create a future and arrange for it to be completed whenever SIGINT or
-    # SIGTERM is received, if on a platform supporting signals. On other
-    # platforms, just create the future but don’t ever set it, which causes an
-    # endless wait and non-graceful termination.
+    # Create a future and arrange for it to be completed whenever SIGINT or SIGTERM is
+    # received, if on a platform supporting signals. On other platforms, just create the
+    # future but don’t ever set it, which causes an endless wait and non-graceful
+    # termination.
     term_sig = loop.create_future()
     if hasattr(loop, "add_signal_handler"):
+
         def signal_handler(signal_name: str) -> None:
-            """
-            Handle a signal.
-            """
-            try:
+            """Handle a signal."""
+            # InvalidStateError is raised if the future has already completed, which it
+            # might have if two signals are received.
+            with contextlib.suppress(asyncio.InvalidStateError):
                 term_sig.set_result(signal_name)
-            except asyncio.InvalidStateError:
-                # Future already done.
-                pass
+
         for signal_name in ("SIGINT", "SIGTERM"):
             if hasattr(signal, signal_name):
-                loop.add_signal_handler(getattr(signal, signal_name), functools.partial(signal_handler, signal_name))
+                loop.add_signal_handler(
+                    getattr(signal, signal_name),
+                    functools.partial(signal_handler, signal_name),
+                )
 
     # Start up the lifespan protocol.
-    lifespan_app_to_framework_queue: "asyncio.Queue[Optional[core.EventOrScope]]" = asyncio.Queue()
-    lifespan_framework_to_app_queue: "asyncio.Queue[core.EventOrScope]" = asyncio.Queue()
-    lifespan_manager = core.LifespanManager(lifespan_framework_to_app_queue.put, lifespan_app_to_framework_queue.get)
-    asyncio.ensure_future(_lifespan_coro(application, lifespan_manager, lifespan_app_to_framework_queue.put, lifespan_framework_to_app_queue.get))
+    lifespan_app_to_framework_queue: asyncio.Queue[
+        core.EventOrScope | None
+    ] = asyncio.Queue()
+    lifespan_framework_to_app_queue: asyncio.Queue[core.EventOrScope] = asyncio.Queue()
+    lifespan_manager = core.LifespanManager(
+        lifespan_framework_to_app_queue.put, lifespan_app_to_framework_queue.get
+    )
+    lifespan_future = asyncio.ensure_future(
+        _lifespan_coro(
+            application,
+            lifespan_manager,
+            lifespan_app_to_framework_queue.put,
+            lifespan_framework_to_app_queue.get,
+        )
+    )
 
     try:
         # Start up the application.
@@ -145,32 +176,39 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
         try:
             # Start the server and, if provided, run the after listen callback.
             client_connections: set[asyncio.Task[None]] = set()
-            srv = await start_server_fn(functools.partial(_connection_wrapper, application, client_connections, container))
+            srv = await start_server_fn(
+                functools.partial(
+                    _connection_wrapper, application, client_connections, container
+                )
+            )
             after_listen_cb()
             logging.getLogger(__name__).info("Server up and running")
 
             # Wait until requested to terminate.
             signal_name = await term_sig
-            logging.getLogger(__name__).info("Caught termination signal %s", signal_name)
+            logging.getLogger(__name__).info(
+                "Caught termination signal %s", signal_name
+            )
 
             # Close the listening socket.
             srv.close()
             await srv.wait_closed()
             logging.getLogger(__name__).info("Server no longer listening")
 
-            # Wait until all the client connections finish. Each time a task
-            # finishes, it removes itself from the set, and we want to wait
-            # until they are all gone, so just wait for an arbitrary task over
-            # and over until the set is empty.
+            # Wait until all the client connections finish. Each time a task finishes,
+            # it removes itself from the set, and we want to wait until they are all
+            # gone, so just wait for an arbitrary task over and over until the set is
+            # empty.
             while client_connections:
                 await next(iter(client_connections))
             logging.getLogger(__name__).info("All client connections closed")
         finally:
             # Shut down the application.
             await lifespan_manager.shutdown()
+            await lifespan_future
     finally:
-        # Cancel all the running tasks except myself, thus allowing them to
-        # clean up properly.
+        # Cancel all the running tasks except myself, thus allowing them to clean up
+        # properly.
         logging.getLogger(__name__).debug("Terminating running tasks")
         all_tasks = asyncio.all_tasks(loop)
         for i in all_tasks:
@@ -183,11 +221,18 @@ async def _main_coroutine(application: core.ApplicationType, start_server_fn: Ca
                 except asyncio.CancelledError:
                     # Nothing to see here. Move along.
                     pass
-                except Exception:  # pylint: disable=broad-except
-                    logging.getLogger(__name__).error("Uncaught exception while cancelling task", exc_info=True)
+                except Exception:  # pylint: disable=broad-except # noqa: BLE001
+                    logging.getLogger(__name__).error(
+                        "Uncaught exception while cancelling task", exc_info=True
+                    )
 
 
-def run_tcp(application: core.ApplicationType, hosts: Optional[list[str]], port: int, container: core.Container) -> None:
+def run_tcp(
+    application: core.ApplicationType,
+    hosts: list[str] | None,
+    port: int,
+    container: core.Container,
+) -> None:
     """
     Run an application listening for SCGI connections on a TCP port.
 
@@ -197,21 +242,37 @@ def run_tcp(application: core.ApplicationType, hosts: Optional[list[str]], port:
     :param port: The port number.
     :param container: The ASGI container to use.
     """
-    asyncio.run(_main_coroutine(application, functools.partial(asyncio.start_server, host=hosts, port=port), _do_nothing, container))
+    asyncio.run(
+        _main_coroutine(
+            application,
+            functools.partial(asyncio.start_server, host=hosts, port=port),
+            _do_nothing,
+            container,
+        )
+    )
 
 
-def run_unix(application: core.ApplicationType, path: str, container: core.Container) -> None:
+def run_unix(
+    application: core.ApplicationType, path: str, container: core.Container
+) -> None:
     """
     Run an application listening for SCGI connections on a UNIX socket.
 
     The socket always has file mode 666. It is not really possible to create a
-    UNIX-domain socket with more restrictive permissions from the outset (other
-    than perhaps by using umask, which is not thread-safe), and creating it
-    with a more permissive mode and then chmodding it afterward leaves an
-    undesirable race condition.
+    UNIX-domain socket with more restrictive permissions from the outset (other than
+    perhaps by using umask, which is not thread-safe), and creating it with a more
+    permissive mode and then chmodding it afterward leaves an undesirable race
+    condition.
 
     :param application: The application callable.
     :param path: The filename of the socket to listen on.
     :param container: The ASGI container to use.
     """
-    asyncio.run(_main_coroutine(application, functools.partial(asyncio.start_unix_server, path=path), functools.partial(os.chmod, path, 0o666), container))
+    asyncio.run(
+        _main_coroutine(
+            application,
+            functools.partial(asyncio.start_unix_server, path=path),
+            functools.partial(os.chmod, path, 0o666),
+            container,
+        )
+    )

@@ -32,7 +32,7 @@ def events_equal(event1: sioscgi.Event, event2: object) -> bool:
         | sioscgi.ResponseBody
         | sioscgi.ResponseEnd,
     ):
-        raise ValueError("Only applicable to sioscgi events.")
+        return NotImplemented
     slots = event1.__slots__
     if isinstance(slots, str):
         slots = (slots,)

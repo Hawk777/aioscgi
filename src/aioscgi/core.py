@@ -466,9 +466,9 @@ class _Instance:
             body = event.get("body")
             if body:  # is present, not None, and nonzero length
                 assert isinstance(body, bytes)
-                await self._send_event(sioscgi.ResponseBody(body), True)
+                await self._send_event(sioscgi.ResponseBody(body), drain=True)
             if not event.get("more_body", False):
-                await self._send_event(sioscgi.ResponseEnd(), True)
+                await self._send_event(sioscgi.ResponseEnd(), drain=True)
         else:
             raise ValueError(f"Unknown event type {event_type!r} passed to send")
 
@@ -489,7 +489,7 @@ class _Instance:
             # Send the headers, but don’t drain the connection; allow the I/O layer to
             # optimize by concatenating the headers and the first body chunk into a
             # single OS call if it wishes.
-            await self._send_event(self._response_headers, False)
+            await self._send_event(self._response_headers, drain=False)
 
             self._response_headers_sent = True
 

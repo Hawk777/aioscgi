@@ -16,6 +16,7 @@ disable = [
 	"no-else-raise",
 	"no-else-return",
 	"too-few-public-methods",
+	"too-many-arguments",
 	"too-many-branches",
 	"too-many-instance-attributes",
 	"too-many-locals",

@@ -49,12 +49,13 @@ class ApplicationInitializationError(Exception):
 class LifespanManager:
     """Implements the ASGI lifespan protocol."""
 
-    __slots__ = ("_send", "_receive", "_unsupported")
+    __slots__ = ("_send", "_receive", "_unsupported", "_state")
 
     def __init__(
         self: LifespanManager,
         send: SendFunction,
         receive: Callable[[], Awaitable[EventOrScope | None]],
+        state: dict[Any, Any],
     ) -> None:
         """
         Construct a new LifespanManager.
@@ -66,15 +67,21 @@ class LifespanManager:
             coroutine instance running the lifespan protocol sends an event, then
             returns that event, or None if the application coroutine terminates with an
             exception.
+        :param state: The state dictionary that the application can use.
         """
         self._send: SendFunction = send
         self._receive: Callable[[], Awaitable[EventOrScope | None]] = receive
         self._unsupported: bool = False
+        self._state: dict[Any, Any] = state
 
     @property
     def scope(self: LifespanManager) -> EventOrScope:
         """The scope that should be passed to the application callable."""
-        return {"type": "lifespan", "asgi": {"version": "3.0", "spec_version": "2.0"}}
+        return {
+            "type": "lifespan",
+            "asgi": {"version": "3.0", "spec_version": "2.0"},
+            "state": self._state,
+        }
 
     @staticmethod
     def check_application_event(event: EventOrScope) -> None:
@@ -260,6 +267,7 @@ class _Instance:
         "_conn",
         "_response_headers",
         "_response_headers_sent",
+        "_state",
     )
 
     def __init__(
@@ -268,6 +276,7 @@ class _Instance:
         read_cb: Callable[[], Awaitable[bytes]],
         write_cb: Callable[[bytes, bool], Awaitable[None]],
         base_uri: str | None,
+        state: dict[Any, Any],
     ) -> None:
         """
         Construct a new _Instance.
@@ -278,6 +287,7 @@ class _Instance:
         :param base_uri: The request URI prefix to the base of the application for
             computing root_path and path, or None to use SCRIPT_NAME and PATH_INFO
             instead.
+        :param state: The state dictionary that the application can use.
         """
         self._application: ApplicationType = application
         self._read_cb: Callable[[], Awaitable[bytes]] = read_cb
@@ -288,6 +298,7 @@ class _Instance:
         self._conn: sioscgi.SCGIConnection = sioscgi.SCGIConnection()
         self._response_headers: sioscgi.ResponseHeaders | None = None
         self._response_headers_sent: bool = False
+        self._state: dict[Any, Any] = state
 
     async def run(self: _Instance) -> None:
         """Run the application."""
@@ -395,6 +406,7 @@ class _Instance:
             "extensions": {
                 "environ": environ,
             },
+            "state": self._state,
         }
 
         # Run the application.
@@ -530,6 +542,7 @@ class Container:
         application: ApplicationType,
         read_cb: Callable[[], Awaitable[bytes]],
         write_cb: Callable[[bytes, bool], Awaitable[None]],
+        state: dict[Any, Any],
     ) -> Awaitable[None]:
         """
         Run the application to handle one client connection.
@@ -547,6 +560,7 @@ class Container:
             and, when called, sends the bytes to the SCGI client; the bool is a hint
             indicating whether the coroutine should wait until the bytes have been sent
             before returning.
+        :param state: The state dictionary that the application can use.
         """
-        i = _Instance(application, read_cb, write_cb, self._base_uri)
+        i = _Instance(application, read_cb, write_cb, self._base_uri, state)
         return i.run()

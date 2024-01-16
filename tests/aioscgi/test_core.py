@@ -52,7 +52,11 @@ def events_equal(event1: sioscgi.Event, event2: object) -> bool:
 class EventMatcher:
     """A matcher that compares sioscgi event objects by their contents."""
 
-    __slots__ = ("_expected",)
+    __slots__ = {
+        "_expected": """The expected value.""",
+    }
+
+    _expected: sioscgi.Event
 
     def __init__(self: EventMatcher, expected: sioscgi.Event) -> None:
         """

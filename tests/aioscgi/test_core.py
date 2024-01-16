@@ -170,7 +170,7 @@ class TestCore(TestCase):
         conn.send.return_value = b""
         with self.assertRaises(StopIteration):
             coro = aioscgi.core.Container(None).run(
-                app, _unusable_read_cb, _unusable_write_cb
+                app, _unusable_read_cb, _unusable_write_cb, {}
             )
             assert isinstance(coro, Coroutine)
             coro.send(None)
@@ -265,7 +265,7 @@ class TestCore(TestCase):
         conn.send.return_value = b""
         with self.assertRaises(StopIteration):
             coro = aioscgi.core.Container(None).run(
-                app, _unusable_read_cb, _unusable_write_cb
+                app, _unusable_read_cb, _unusable_write_cb, {}
             )
             assert isinstance(coro, Coroutine)
             coro.send(None)
@@ -347,7 +347,7 @@ class TestCore(TestCase):
         conn.send.return_value = b""
         with self.assertRaises(StopIteration):
             coro = aioscgi.core.Container(None).run(
-                app, raw_read_wrapper, _unusable_write_cb
+                app, raw_read_wrapper, _unusable_write_cb, {}
             )
             assert isinstance(coro, Coroutine)
             coro.send(None)
@@ -411,7 +411,7 @@ class TestCore(TestCase):
         conn.send.return_value = b""
         with self.assertRaises(StopIteration):
             coro = aioscgi.core.Container(None).run(
-                app, raw_read_wrapper, _unusable_write_cb
+                app, raw_read_wrapper, _unusable_write_cb, {}
             )
             assert isinstance(coro, Coroutine)
             coro.send(None)
@@ -492,7 +492,7 @@ class TestCore(TestCase):
         conn.send.return_value = b""
         with self.assertRaises(StopIteration):
             coro = aioscgi.core.Container(None).run(
-                app, _unusable_read_cb, _unusable_write_cb
+                app, _unusable_read_cb, _unusable_write_cb, {}
             )
             assert isinstance(coro, Coroutine)
             coro.send(None)
@@ -528,7 +528,7 @@ class TestCore(TestCase):
             return ret
 
         # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive)
+        uut = aioscgi.core.LifespanManager(send, receive, {})
 
         # At this point, nothing should have been done with the queue.
         self.assertFalse(mock_queue.mock_calls)
@@ -564,7 +564,7 @@ class TestCore(TestCase):
             return ret
 
         # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive)
+        uut = aioscgi.core.LifespanManager(send, receive, {})
 
         # At this point, nothing should have been done with the queue.
         self.assertFalse(mock_queue.mock_calls)
@@ -599,7 +599,7 @@ class TestCore(TestCase):
             return ret
 
         # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive)
+        uut = aioscgi.core.LifespanManager(send, receive, {})
 
         # At this point, nothing should have been done with the queue.
         self.assertFalse(mock_queue.mock_calls)
@@ -635,7 +635,7 @@ class TestCore(TestCase):
             return ret
 
         # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive)
+        uut = aioscgi.core.LifespanManager(send, receive, {})
 
         # At this point, nothing should have been done with the queue.
         self.assertFalse(mock_queue.mock_calls)
@@ -668,7 +668,7 @@ class TestCore(TestCase):
             return ret
 
         # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive)
+        uut = aioscgi.core.LifespanManager(send, receive, {})
 
         # At this point, nothing should have been done with the queue.
         self.assertFalse(mock_queue.mock_calls)

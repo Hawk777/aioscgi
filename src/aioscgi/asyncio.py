@@ -8,6 +8,7 @@ import logging
 import os
 import signal
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from . import core
 
@@ -57,6 +58,7 @@ async def _connection_wrapper(
     application: core.ApplicationType,
     client_connections: set[asyncio.Task[None]],
     container: core.Container,
+    state: dict[Any, Any],
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
 ) -> None:
@@ -71,6 +73,7 @@ async def _connection_wrapper(
     :param client_connections: A set of Task objects, to which this connection is added
         on entry to and removed on exit from this function.
     :param container: The ASGI container to use.
+    :param state: The state dictionary that the application can use.
     :param reader: The stream reader for the connection.
     :param writer: The stream writer for the connection.
     """
@@ -93,6 +96,7 @@ async def _connection_wrapper(
                 application,
                 functools.partial(reader.read, io.DEFAULT_BUFFER_SIZE),
                 write_cb,
+                state,
             )
         except Exception:  # pylint: disable=broad-except # noqa: BLE001
             logging.getLogger(__name__).error(
@@ -152,13 +156,16 @@ async def _main_coroutine(
                     functools.partial(signal_handler, signal_name),
                 )
 
+    # Create the state dictionary.
+    state: dict[Any, Any] = {}
+
     # Start up the lifespan protocol.
     lifespan_app_to_framework_queue: asyncio.Queue[
         core.EventOrScope | None
     ] = asyncio.Queue()
     lifespan_framework_to_app_queue: asyncio.Queue[core.EventOrScope] = asyncio.Queue()
     lifespan_manager = core.LifespanManager(
-        lifespan_framework_to_app_queue.put, lifespan_app_to_framework_queue.get
+        lifespan_framework_to_app_queue.put, lifespan_app_to_framework_queue.get, state
     )
     lifespan_future = asyncio.ensure_future(
         _lifespan_coro(
@@ -178,7 +185,11 @@ async def _main_coroutine(
             client_connections: set[asyncio.Task[None]] = set()
             srv = await start_server_fn(
                 functools.partial(
-                    _connection_wrapper, application, client_connections, container
+                    _connection_wrapper,
+                    application,
+                    client_connections,
+                    container,
+                    state,
                 )
             )
             after_listen_cb()

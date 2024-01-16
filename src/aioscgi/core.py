@@ -381,7 +381,7 @@ class _Instance:
             "type": "http",
             "asgi": {
                 "version": "3.0",
-                "spec_version": "2.1",
+                "spec_version": "2.3",
             },
             "http_version": _calc_http_version(environ["SERVER_PROTOCOL"]),
             "method": request_method_str.upper(),

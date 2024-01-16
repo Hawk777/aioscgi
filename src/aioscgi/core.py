@@ -49,7 +49,17 @@ class ApplicationInitializationError(Exception):
 class LifespanManager:
     """Implements the ASGI lifespan protocol."""
 
-    __slots__ = ("_send", "_receive", "_unsupported", "_state")
+    __slots__ = {
+        "_send": """A coroutine that sends an event to the application.""",
+        "_receive": """A coroutine that receives an event from the application.""",
+        "_unsupported": """True if the application coroutine raised an exception.""",
+        "_state": """The application state dictionary.""",
+    }
+
+    _send: SendFunction
+    _receive: Callable[[], Awaitable[EventOrScope | None]]
+    _unsupported: bool
+    _state: dict[Any, Any]
 
     def __init__(
         self: LifespanManager,
@@ -69,10 +79,10 @@ class LifespanManager:
             exception.
         :param state: The state dictionary that the application can use.
         """
-        self._send: SendFunction = send
-        self._receive: Callable[[], Awaitable[EventOrScope | None]] = receive
-        self._unsupported: bool = False
-        self._state: dict[Any, Any] = state
+        self._send = send
+        self._receive = receive
+        self._unsupported = False
+        self._state = state
 
     @property
     def scope(self: LifespanManager) -> EventOrScope:
@@ -257,18 +267,29 @@ def _calc_status(status: int) -> str:
 class _Instance:
     """The handler for one accepted connection."""
 
-    __slots__ = (
-        "_application",
-        "_read_cb",
-        "_write_cb",
-        "_base_uri",
-        "_disconnected",
-        "_request_ended",
-        "_conn",
-        "_response_headers",
-        "_response_headers_sent",
-        "_state",
-    )
+    __slots__ = {
+        "_application": """The application callable.""",
+        "_read_cb": """The read-from-client callable.""",
+        "_write_cb": """The write-to-client callable.""",
+        "_base_uri": """The base URI prefix.""",
+        "_disconnected": """Whether the SCGI connection has been closed.""",
+        "_request_ended": """Whether the end of the request has been received.""",
+        "_conn": """The SCGI protocol state machine.""",
+        "_response_headers": """The response headers provided by the application.""",
+        "_response_headers_sent": """Whether the response headers have been sent.""",
+        "_state": """The application state dictionary.""",
+    }
+
+    _application: ApplicationType
+    _read_cb: Callable[[], Awaitable[bytes]]
+    _write_cb: Callable[[bytes, bool], Awaitable[None]]
+    _base_uri: str | None
+    _disconnected: bool
+    _request_ended: bool
+    _conn: sioscgi.SCGIConnection
+    _response_headers: sioscgi.ResponseHeaders | None
+    _response_headers_sent: bool
+    _state: dict[Any, Any]
 
     def __init__(
         self: _Instance,
@@ -289,16 +310,16 @@ class _Instance:
             instead.
         :param state: The state dictionary that the application can use.
         """
-        self._application: ApplicationType = application
-        self._read_cb: Callable[[], Awaitable[bytes]] = read_cb
-        self._write_cb: Callable[[bytes, bool], Awaitable[None]] = write_cb
-        self._base_uri: str | None = base_uri
-        self._disconnected: bool = False
-        self._request_ended: bool = False
-        self._conn: sioscgi.SCGIConnection = sioscgi.SCGIConnection()
-        self._response_headers: sioscgi.ResponseHeaders | None = None
-        self._response_headers_sent: bool = False
-        self._state: dict[Any, Any] = state
+        self._application = application
+        self._read_cb = read_cb
+        self._write_cb = write_cb
+        self._base_uri = base_uri
+        self._disconnected = False
+        self._request_ended = False
+        self._conn = sioscgi.SCGIConnection()
+        self._response_headers = None
+        self._response_headers_sent = False
+        self._state = state
 
     async def run(self: _Instance) -> None:
         """Run the application."""
@@ -525,7 +546,11 @@ class _Instance:
 class Container:
     """An ASGI container."""
 
-    __slots__ = ("_base_uri",)
+    __slots__ = {
+        "_base_uri": """The base URI prefix.""",
+    }
+
+    _base_uri: str | None
 
     def __init__(self: Container, base_uri: str | None) -> None:
         """
@@ -535,7 +560,7 @@ class Container:
             computing root_path and path, or None to use SCRIPT_NAME and PATH_INFO
             instead.
         """
-        self._base_uri: str | None = base_uri
+        self._base_uri = base_uri
 
     def run(
         self: Container,

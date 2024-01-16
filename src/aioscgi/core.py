@@ -74,7 +74,7 @@ class LifespanManager:
     @property
     def scope(self: LifespanManager) -> EventOrScope:
         """The scope that should be passed to the application callable."""
-        return {"type": "lifespan", "asgi": {"version": "3.0", "spec_version": "1.0"}}
+        return {"type": "lifespan", "asgi": {"version": "3.0", "spec_version": "2.0"}}
 
     @staticmethod
     def check_application_event(event: EventOrScope) -> None:

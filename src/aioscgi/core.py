@@ -348,31 +348,31 @@ class _Instance:
         if self._base_uri is not None:
             # A base path was given explicitly. The request URI must begin with the base
             # path (otherwise the request cannot be handled), and root_path should be
-            # the given base path while path should be the remainder of the request URI.
-            # This form is useful for HTTP servers that don’t set SCRIPT_NAME and
-            # PATH_INFO properly.
+            # the given base path while path should be the entire request URI. This form
+            # is useful for HTTP servers that don’t set SCRIPT_NAME and PATH_INFO
+            # properly.
             request_uri = environ["REQUEST_URI"]
             try:
-                request_uri_str = request_uri.decode("UTF-8")
+                path = request_uri.decode("UTF-8")
             except UnicodeDecodeError:
                 logging.getLogger(__name__).error(
                     "REQUEST_URI %s is not valid UTF-8", request_uri
                 )
                 return
-            if not request_uri_str.startswith(self._base_uri):
+            if not path.startswith(self._base_uri):
                 logging.getLogger(__name__).error(
                     'REQUEST_URI "%s" does not start with specified base URI "%s"',
-                    request_uri_str,
+                    path,
                     self._base_uri,
                 )
                 return
             root_path = self._base_uri
-            path = request_uri_str[len(root_path) :]
         else:
             # No base path was given. The HTTP server is to be trusted to break down the
             # request into a part designating the application (called SCRIPT_NAME in CGI
             # and root_path in ASGI) and a part designating an entity within the
-            # application (called PATH_INFO in CGI and path in ASGI).
+            # application (called PATH_INFO in CGI, and the portion of path following
+            # root_path in ASGI).
             script_name = environ["SCRIPT_NAME"]
             try:
                 root_path = script_name.decode("UTF-8")
@@ -383,7 +383,7 @@ class _Instance:
                 return
             path_info = environ.get("PATH_INFO", b"")
             try:
-                path = path_info.decode("UTF-8")
+                path = root_path + path_info.decode("UTF-8")
             except UnicodeDecodeError:
                 logging.getLogger(__name__).error(
                     "PATH_INFO %s is not valid UTF-8", path_info

@@ -14,7 +14,8 @@ import wsgiref.util
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import sioscgi
+import sioscgi.request
+import sioscgi.response
 
 EventOrScopeValue = bytes | str | int | float | list[Any] | dict[str, Any] | bool | None
 """The legal types of values in event or scope dictionaries."""
@@ -274,7 +275,8 @@ class _Instance:
         "_base_uri": """The base URI prefix.""",
         "_disconnected": """Whether the SCGI connection has been closed.""",
         "_request_ended": """Whether the end of the request has been received.""",
-        "_conn": """The SCGI protocol state machine.""",
+        "_reader": """The SCGI protocol request state machine.""",
+        "_writer": """The SCGI protocol response state machine.""",
         "_response_headers": """The response headers provided by the application.""",
         "_response_headers_sent": """Whether the response headers have been sent.""",
         "_state": """The application state dictionary.""",
@@ -286,8 +288,9 @@ class _Instance:
     _base_uri: str | None
     _disconnected: bool
     _request_ended: bool
-    _conn: sioscgi.SCGIConnection
-    _response_headers: sioscgi.ResponseHeaders | None
+    _reader: sioscgi.request.SCGIReader
+    _writer: sioscgi.response.SCGIWriter
+    _response_headers: sioscgi.response.Headers | None
     _response_headers_sent: bool
     _state: dict[Any, Any]
 
@@ -316,7 +319,8 @@ class _Instance:
         self._base_uri = base_uri
         self._disconnected = False
         self._request_ended = False
-        self._conn = sioscgi.SCGIConnection()
+        self._reader = sioscgi.request.SCGIReader()
+        self._writer = sioscgi.response.SCGIWriter()
         self._response_headers = None
         self._response_headers_sent = False
         self._state = state
@@ -326,18 +330,18 @@ class _Instance:
         # Receive the request line and headers from the SCGI client.
         environ: dict[str, bytes] | None = None
         while environ is None:
-            event = self._conn.next_event()
+            event = self._reader.next_event()
             if event is None:
                 chunk = await self._read_chunk()
                 if chunk:
-                    self._conn.receive_data(chunk)
+                    self._reader.receive_data(chunk)
                 else:
                     # EOF before headers are finished. Abandon the request.
                     return
             else:
                 # Got a complete event. The first received event should be the request
                 # headers.
-                assert isinstance(event, sioscgi.RequestHeaders)
+                assert isinstance(event, sioscgi.request.Headers)
                 environ = event.environment
 
         # Uppercase keys in the environment (the CGI specification states that they are
@@ -455,8 +459,8 @@ class _Instance:
         while True:
             # Try to get an event from sioscgi.
             try:
-                event = self._conn.next_event()
-            except sioscgi.RemoteProtocolError:
+                event = self._reader.next_event()
+            except sioscgi.request.Error:
                 self._request_ended = True
                 self._disconnected = True
                 logging.getLogger(__name__).error(
@@ -465,8 +469,8 @@ class _Instance:
                 return {"type": "http.disconnect"}
             if event is not None:
                 # Translate the event into an ASGI event.
-                assert isinstance(event, sioscgi.RequestBody | sioscgi.RequestEnd)
-                if isinstance(event, sioscgi.RequestBody):
+                assert isinstance(event, sioscgi.request.Body | sioscgi.request.End)
+                if isinstance(event, sioscgi.request.Body):
                     return {
                         "type": "http.request",
                         "body": event.data,
@@ -476,7 +480,7 @@ class _Instance:
                 return {"type": "http.request"}
             # No more events available. Read bytes from the SCGI socket.
             raw = await self._read_chunk()
-            self._conn.receive_data(raw)
+            self._reader.receive_data(raw)
             if not raw:
                 self._request_ended = True
                 self._disconnected = True
@@ -491,7 +495,7 @@ class _Instance:
             assert isinstance(status_code, int)
             headers = event["headers"]
             assert isinstance(headers, list)
-            self._response_headers = sioscgi.ResponseHeaders(
+            self._response_headers = sioscgi.response.Headers(
                 _calc_status(status_code),
                 [(k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers],
             )
@@ -500,9 +504,9 @@ class _Instance:
             body = event.get("body")
             if body:  # is present, not None, and nonzero length
                 assert isinstance(body, bytes)
-                await self._send_event(sioscgi.ResponseBody(body), drain=True)
+                await self._send_event(sioscgi.response.Body(body), drain=True)
             if not event.get("more_body", False):
-                await self._send_event(sioscgi.ResponseEnd(), drain=True)
+                await self._send_event(sioscgi.response.End(), drain=True)
         else:
             msg = f"Unknown event type {event_type!r} passed to send"
             raise ValueError(msg)
@@ -529,12 +533,13 @@ class _Instance:
 
             self._response_headers_sent = True
 
-    async def _send_event(self: _Instance, event: sioscgi.Event, drain: bool) -> None:
+    async def _send_event(
+        self: _Instance, event: sioscgi.response.Event, drain: bool
+    ) -> None:
         """Send an event to the SCGI client."""
-        raw = self._conn.send(event)
-        if (
-            raw and not self._disconnected
-        ):  # If disconnected, silently discard (ASGI says so).
+        raw = self._writer.send(event)
+        # If disconnected, silently discard (ASGI says so).
+        if raw and not self._disconnected:
             try:
                 await self._write_cb(raw, drain)
             except (BrokenPipeError, ConnectionResetError):

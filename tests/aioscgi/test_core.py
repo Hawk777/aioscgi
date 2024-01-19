@@ -7,15 +7,16 @@ from collections.abc import Coroutine
 from unittest import TestCase
 from unittest.mock import MagicMock, call, patch
 
-import sioscgi
+import sioscgi.request
+import sioscgi.response
 
 import aioscgi.core
 from aioscgi.core import EventOrScope, ReceiveFunction, SendFunction
 
 
-def events_equal(event1: sioscgi.Event, event2: object) -> bool:
+def events_equal(event1: sioscgi.response.Event, event2: object) -> bool:
     """
-    Check whether two sioscgi events are deeply equal.
+    Check whether two sioscgi response events are deeply equal.
 
     :param event1: the first value
     :param event2: the second value
@@ -25,12 +26,7 @@ def events_equal(event1: sioscgi.Event, event2: object) -> bool:
         return False
     if not isinstance(
         event1,
-        sioscgi.RequestHeaders
-        | sioscgi.RequestBody
-        | sioscgi.RequestEnd
-        | sioscgi.ResponseHeaders
-        | sioscgi.ResponseBody
-        | sioscgi.ResponseEnd,
+        sioscgi.response.Headers | sioscgi.response.Body | sioscgi.response.End,
     ):
         return NotImplemented
     slots = event1.__slots__
@@ -56,9 +52,9 @@ class EventMatcher:
         "_expected": """The expected value.""",
     }
 
-    _expected: sioscgi.Event
+    _expected: sioscgi.response.Event
 
-    def __init__(self: EventMatcher, expected: sioscgi.Event) -> None:
+    def __init__(self: EventMatcher, expected: sioscgi.response.Event) -> None:
         """
         Construct a new matcher.
 
@@ -110,8 +106,11 @@ async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
 class TestCore(TestCase):
     """Tests the core logic."""
 
-    @patch("sioscgi.SCGIConnection")
-    def test_simple(self: TestCore, conn_class: MagicMock) -> None:
+    @patch("sioscgi.response.SCGIWriter")
+    @patch("sioscgi.request.SCGIReader")
+    def test_simple(
+        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+    ) -> None:
         """Test a simple application."""
 
         async def app(
@@ -159,8 +158,9 @@ class TestCore(TestCase):
             )
             await send({"type": "http.response.body", "body": b"Hello World!"})
 
-        conn = conn_class.return_value
-        headers = sioscgi.RequestHeaders(
+        reader = reader_class.return_value
+        writer = writer_class.return_value
+        headers = sioscgi.request.Headers(
             {
                 "SERVER_PROTOCOL": b"HTTP/1.1",
                 "REQUEST_METHOD": b"GET",
@@ -170,8 +170,8 @@ class TestCore(TestCase):
                 "SERVER_PORT": b"80",
             }
         )
-        conn.next_event.side_effect = [headers, sioscgi.RequestEnd()]
-        conn.send.return_value = b""
+        reader.next_event.side_effect = [headers, sioscgi.request.End()]
+        writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             coro = aioscgi.core.Container(None).run(
                 app, _unusable_read_cb, _unusable_write_cb, {}
@@ -179,24 +179,28 @@ class TestCore(TestCase):
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
-            list(conn.mock_calls),
+            list(reader.mock_calls), [call.next_event(), call.next_event()]
+        )
+        self.assertEqual(
+            list(writer.mock_calls),
             [
-                call.next_event(),
-                call.next_event(),
                 call.send(
                     EventMatcher(
-                        sioscgi.ResponseHeaders(
+                        sioscgi.response.Headers(
                             "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
                         )
                     )
                 ),
-                call.send(EventMatcher(sioscgi.ResponseBody(b"Hello World!"))),
-                call.send(EventMatcher(sioscgi.ResponseEnd())),
+                call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
+                call.send(EventMatcher(sioscgi.response.End())),
             ],
         )
 
-    @patch("sioscgi.SCGIConnection")
-    def test_multi_body(self: TestCore, conn_class: MagicMock) -> None:
+    @patch("sioscgi.response.SCGIWriter")
+    @patch("sioscgi.request.SCGIReader")
+    def test_multi_body(
+        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+    ) -> None:
         """Test request and response bodies transported in multiple parts."""
 
         async def app(
@@ -248,8 +252,9 @@ class TestCore(TestCase):
             )
             await send({"type": "http.response.body", "body": b"World!"})
 
-        conn = conn_class.return_value
-        headers = sioscgi.RequestHeaders(
+        reader = reader_class.return_value
+        writer = writer_class.return_value
+        headers = sioscgi.request.Headers(
             {
                 "SERVER_PROTOCOL": b"HTTP/1.1",
                 "REQUEST_METHOD": b"GET",
@@ -260,13 +265,13 @@ class TestCore(TestCase):
                 "CONTENT_LENGTH": b"8",
             }
         )
-        conn.next_event.side_effect = [
+        reader.next_event.side_effect = [
             headers,
-            sioscgi.RequestBody(b"abcd"),
-            sioscgi.RequestBody(b"efgh"),
-            sioscgi.RequestEnd(),
+            sioscgi.request.Body(b"abcd"),
+            sioscgi.request.Body(b"efgh"),
+            sioscgi.request.End(),
         ]
-        conn.send.return_value = b""
+        writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             coro = aioscgi.core.Container(None).run(
                 app, _unusable_read_cb, _unusable_write_cb, {}
@@ -274,15 +279,20 @@ class TestCore(TestCase):
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
-            list(conn.mock_calls),
+            list(reader.mock_calls),
             [
                 call.next_event(),
                 call.next_event(),
                 call.next_event(),
                 call.next_event(),
+            ],
+        )
+        self.assertEqual(
+            list(writer.mock_calls),
+            [
                 call.send(
                     EventMatcher(
-                        sioscgi.ResponseHeaders(
+                        sioscgi.response.Headers(
                             "200 OK",
                             [
                                 ("Content-Type", "text/plain; charset=UTF-8"),
@@ -291,14 +301,17 @@ class TestCore(TestCase):
                         )
                     )
                 ),
-                call.send(EventMatcher(sioscgi.ResponseBody(b"Hello "))),
-                call.send(EventMatcher(sioscgi.ResponseBody(b"World!"))),
-                call.send(EventMatcher(sioscgi.ResponseEnd())),
+                call.send(EventMatcher(sioscgi.response.Body(b"Hello "))),
+                call.send(EventMatcher(sioscgi.response.Body(b"World!"))),
+                call.send(EventMatcher(sioscgi.response.End())),
             ],
         )
 
-    @patch("sioscgi.SCGIConnection")
-    def test_disconnect_after_request(self: TestCore, conn_class: MagicMock) -> None:
+    @patch("sioscgi.response.SCGIWriter")
+    @patch("sioscgi.request.SCGIReader")
+    def test_disconnect_after_request(
+        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+    ) -> None:
         """Test a long polling client disconnecting before the response body is sent."""
 
         async def app(
@@ -328,8 +341,9 @@ class TestCore(TestCase):
             message = await receive()
             self.assertEqual(message["type"], "http.disconnect")
 
-        conn = conn_class.return_value
-        headers = sioscgi.RequestHeaders(
+        reader = reader_class.return_value
+        writer = writer_class.return_value
+        headers = sioscgi.request.Headers(
             {
                 "SERVER_PROTOCOL": b"HTTP/1.1",
                 "REQUEST_METHOD": b"GET",
@@ -339,8 +353,8 @@ class TestCore(TestCase):
                 "SERVER_PORT": b"80",
             }
         )
-        conn.next_event.side_effect = [headers, sioscgi.RequestEnd(), None]
-        raw_read = conn.raw_read
+        reader.next_event.side_effect = [headers, sioscgi.request.End(), None]
+        raw_read = reader.raw_read
         raw_read.return_value = b""
 
         async def raw_read_wrapper() -> bytes:
@@ -348,7 +362,7 @@ class TestCore(TestCase):
             assert isinstance(ret, bytes)
             return ret
 
-        conn.send.return_value = b""
+        writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             coro = aioscgi.core.Container(None).run(
                 app, raw_read_wrapper, _unusable_write_cb, {}
@@ -356,12 +370,16 @@ class TestCore(TestCase):
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
-            list(conn.mock_calls),
+            list(reader.mock_calls),
             [call.next_event(), call.next_event(), call.raw_read()],
         )
+        self.assertEqual(list(writer.mock_calls), [])
 
-    @patch("sioscgi.SCGIConnection")
-    def test_disconnect_during_request(self: TestCore, conn_class: MagicMock) -> None:
+    @patch("sioscgi.response.SCGIWriter")
+    @patch("sioscgi.request.SCGIReader")
+    def test_disconnect_during_request(
+        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+    ) -> None:
         """Test a case where the client disconnects while sending the request."""
 
         async def app(
@@ -391,8 +409,9 @@ class TestCore(TestCase):
             message = await receive()
             self.assertEqual(message["type"], "http.disconnect")
 
-        conn = conn_class.return_value
-        headers = sioscgi.RequestHeaders(
+        reader = reader_class.return_value
+        writer = writer_class.return_value
+        headers = sioscgi.request.Headers(
             {
                 "SERVER_PROTOCOL": b"HTTP/1.1",
                 "REQUEST_METHOD": b"GET",
@@ -403,8 +422,8 @@ class TestCore(TestCase):
                 "CONTENT_LENGTH": b"8",
             }
         )
-        conn.next_event.side_effect = [headers, sioscgi.RequestBody(b"1234"), None]
-        raw_read = conn.raw_read
+        reader.next_event.side_effect = [headers, sioscgi.request.Body(b"1234"), None]
+        raw_read = reader.raw_read
         raw_read.return_value = b""
 
         async def raw_read_wrapper() -> bytes:
@@ -412,7 +431,7 @@ class TestCore(TestCase):
             assert isinstance(ret, bytes)
             return ret
 
-        conn.send.return_value = b""
+        writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             coro = aioscgi.core.Container(None).run(
                 app, raw_read_wrapper, _unusable_write_cb, {}
@@ -420,7 +439,7 @@ class TestCore(TestCase):
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
-            list(conn.mock_calls),
+            list(reader.mock_calls),
             [
                 call.next_event(),
                 call.next_event(),
@@ -429,9 +448,13 @@ class TestCore(TestCase):
                 call.receive_data(b""),
             ],
         )
+        self.assertEqual(list(writer.mock_calls), [])
 
-    @patch("sioscgi.SCGIConnection")
-    def test_https(self: TestCore, conn_class: MagicMock) -> None:
+    @patch("sioscgi.response.SCGIWriter")
+    @patch("sioscgi.request.SCGIReader")
+    def test_https(
+        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+    ) -> None:
         """Test that an HTTPS request is recognized as such."""
 
         async def app(
@@ -480,8 +503,9 @@ class TestCore(TestCase):
             )
             await send({"type": "http.response.body", "body": b"Hello World!"})
 
-        conn = conn_class.return_value
-        headers = sioscgi.RequestHeaders(
+        reader = reader_class.return_value
+        writer = writer_class.return_value
+        headers = sioscgi.request.Headers(
             {
                 "SERVER_PROTOCOL": b"HTTP/1.1",
                 "REQUEST_METHOD": b"GET",
@@ -492,8 +516,8 @@ class TestCore(TestCase):
                 "HTTPS": b"1",
             }
         )
-        conn.next_event.side_effect = [headers, sioscgi.RequestEnd()]
-        conn.send.return_value = b""
+        reader.next_event.side_effect = [headers, sioscgi.request.End()]
+        writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             coro = aioscgi.core.Container(None).run(
                 app, _unusable_read_cb, _unusable_write_cb, {}
@@ -501,19 +525,20 @@ class TestCore(TestCase):
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
-            list(conn.mock_calls),
+            list(reader.mock_calls), [call.next_event(), call.next_event()]
+        )
+        self.assertEqual(
+            list(writer.mock_calls),
             [
-                call.next_event(),
-                call.next_event(),
                 call.send(
                     EventMatcher(
-                        sioscgi.ResponseHeaders(
+                        sioscgi.response.Headers(
                             "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
                         )
                     )
                 ),
-                call.send(EventMatcher(sioscgi.ResponseBody(b"Hello World!"))),
-                call.send(EventMatcher(sioscgi.ResponseEnd())),
+                call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
+                call.send(EventMatcher(sioscgi.response.End())),
             ],
         )
 

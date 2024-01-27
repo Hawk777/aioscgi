@@ -203,13 +203,21 @@ async def _main_coroutine(
 
             # Close the listening socket.
             srv.close()
-            await srv.wait_closed()
             logging.getLogger(__name__).info("Server no longer listening")
 
             # Wait until all the client connections finish. Each time a task finishes,
             # it removes itself from the set, and we want to wait until they are all
             # gone, so just wait for an arbitrary task over and over until the set is
             # empty.
+            #
+            # In some versions of Python, wait_closed theoretically waits until the
+            # closure of the listening socket is complete, but in practice doesn’t
+            # actually do anything because the listening socket is closed synchronously.
+            # In other versions of Python, wait_closed does that and also waits until
+            # all accepted connections have been completed as well. Either way, it’s
+            # reasonable to call it and to consider it part of waiting for closure of
+            # existing connections.
+            await srv.wait_closed()
             while client_connections:
                 await next(iter(client_connections))
             logging.getLogger(__name__).info("All client connections closed")

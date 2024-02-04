@@ -203,7 +203,7 @@ def _make_scope(
     }
 
 
-class _Instance:
+class _Connection:
     """The handler for one accepted connection."""
 
     __slots__ = {
@@ -229,13 +229,13 @@ class _Instance:
     _response_headers_sent: bool
 
     def __init__(
-        self: _Instance,
+        self: _Connection,
         container: Container,
         read_cb: Callable[[], Awaitable[bytes]],
         write_cb: Callable[[bytes, bool], Awaitable[None]],
     ) -> None:
         """
-        Construct a new _Instance.
+        Construct a new _Connection.
 
         :param container: The ASGI container.
         :param read_cb: The read-from-client callable.
@@ -251,7 +251,7 @@ class _Instance:
         self._response_headers = None
         self._response_headers_sent = False
 
-    async def run(self: _Instance) -> None:
+    async def run(self: _Connection) -> None:
         """Run the application."""
         # Receive the request line and headers from the SCGI client.
         environ: dict[str, bytes] | None = None
@@ -279,7 +279,7 @@ class _Instance:
         logging.getLogger(__name__).debug("Starting application with scope %s", scope)
         await self._container.application(scope, self._receive, self._send)
 
-    async def _receive(self: _Instance) -> EventOrScope:
+    async def _receive(self: _Connection) -> EventOrScope:
         """Receive the next event from the SCGI client to the application."""
         if self._disconnected:
             # The connection has already disconnected.
@@ -328,7 +328,7 @@ class _Instance:
                 logging.getLogger(__name__).debug("Premature EOF on SCGI socket")
                 return {"type": "http.disconnect"}
 
-    async def _send(self: _Instance, event: EventOrScope) -> None:
+    async def _send(self: _Connection, event: EventOrScope) -> None:
         event_type = event["type"]
         if event_type == "http.response.start":
             assert self._response_headers is None
@@ -352,14 +352,14 @@ class _Instance:
             msg = f"Unknown event type {event_type!r} passed to send"
             raise ValueError(msg)
 
-    async def _read_chunk(self: _Instance) -> bytes:
+    async def _read_chunk(self: _Connection) -> bytes:
         """Read the next chunk from the SCGI client."""
         try:
             return await self._read_cb()
         except ConnectionResetError:
             return b""
 
-    async def _send_headers(self: _Instance) -> None:
+    async def _send_headers(self: _Connection) -> None:
         """Send the headers to the SCGI client, if not already been sent."""
         if not self._response_headers_sent:
             # We must have some headers to send.
@@ -375,7 +375,7 @@ class _Instance:
             self._response_headers_sent = True
 
     async def _send_event(
-        self: _Instance, event: sioscgi.response.Event, drain: bool
+        self: _Connection, event: sioscgi.response.Event, drain: bool
     ) -> None:
         """Send an event to the SCGI client."""
         raw = self._writer.send(event)
@@ -411,5 +411,5 @@ def run(
         before returning.
     :param state: The state dictionary that the application can use.
     """
-    i = _Instance(container, read_cb, write_cb)
-    return i.run()
+    conn = _Connection(container, read_cb, write_cb)
+    return conn.run()

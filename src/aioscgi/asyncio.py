@@ -9,7 +9,7 @@ import os
 import signal
 from collections.abc import Awaitable, Callable
 
-from . import lifespan
+from . import http, lifespan
 from .http import Container
 
 
@@ -51,7 +51,8 @@ async def _connection_wrapper(
                     await writer.drain()
 
             # Run the application.
-            await container.run(
+            await http.run(
+                container,
                 functools.partial(reader.read, io.DEFAULT_BUFFER_SIZE),
                 write_cb,
             )

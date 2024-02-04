@@ -416,27 +416,28 @@ class Container:
         self.base_uri = base_uri
         self.state = {}
 
-    def run(
-        self: Container,
-        read_cb: Callable[[], Awaitable[bytes]],
-        write_cb: Callable[[bytes, bool], Awaitable[None]],
-    ) -> Awaitable[None]:
-        """
-        Run the application to handle one client connection.
 
-        Any exceptions raised by application are propagated to the caller.
+def run(
+    container: Container,
+    read_cb: Callable[[], Awaitable[bytes]],
+    write_cb: Callable[[bytes, bool], Awaitable[None]],
+) -> Awaitable[None]:
+    """
+    Run the application to handle one client connection.
 
-        The caller is expected to close the connection to the SCGI client after this
-        function returns.
+    Any exceptions raised by application are propagated to the caller.
 
-        :param read_cb: A coroutine which accepts no parameters and, when called,
-            returns a bytes received from the SCGI client, or an empty bytes if the SCGI
-            client has closed the connection.
-        :param write_cb: A coroutine which accepts a bytes and a bool as a parameter
-            and, when called, sends the bytes to the SCGI client; the bool is a hint
-            indicating whether the coroutine should wait until the bytes have been sent
-            before returning.
-        :param state: The state dictionary that the application can use.
-        """
-        i = _Instance(self, read_cb, write_cb)
-        return i.run()
+    The caller is expected to close the connection to the SCGI client after this
+    function returns.
+
+    :param read_cb: A coroutine which accepts no parameters and, when called,
+        returns a bytes received from the SCGI client, or an empty bytes if the SCGI
+        client has closed the connection.
+    :param write_cb: A coroutine which accepts a bytes and a bool as a parameter
+        and, when called, sends the bytes to the SCGI client; the bool is a hint
+        indicating whether the coroutine should wait until the bytes have been sent
+        before returning.
+    :param state: The state dictionary that the application can use.
+    """
+    i = _Instance(container, read_cb, write_cb)
+    return i.run()

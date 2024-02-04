@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, call, patch
 import sioscgi.request
 import sioscgi.response
 
+from aioscgi import http
 from aioscgi.http import Container
 from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
 
@@ -173,7 +174,8 @@ class TestHTTP(TestCase):
         reader.next_event.side_effect = [headers, sioscgi.request.End()]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = Container(app, None).run(_unusable_read_cb, _unusable_write_cb)
+            container = Container(app, None)
+            coro = http.run(container, _unusable_read_cb, _unusable_write_cb)
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -271,7 +273,8 @@ class TestHTTP(TestCase):
         ]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = Container(app, None).run(_unusable_read_cb, _unusable_write_cb)
+            container = Container(app, None)
+            coro = http.run(container, _unusable_read_cb, _unusable_write_cb)
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -360,7 +363,8 @@ class TestHTTP(TestCase):
 
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = Container(app, None).run(raw_read_wrapper, _unusable_write_cb)
+            container = Container(app, None)
+            coro = http.run(container, raw_read_wrapper, _unusable_write_cb)
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -427,7 +431,8 @@ class TestHTTP(TestCase):
 
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = Container(app, None).run(raw_read_wrapper, _unusable_write_cb)
+            container = Container(app, None)
+            coro = http.run(container, raw_read_wrapper, _unusable_write_cb)
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -511,7 +516,8 @@ class TestHTTP(TestCase):
         reader.next_event.side_effect = [headers, sioscgi.request.End()]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = Container(app, None).run(_unusable_read_cb, _unusable_write_cb)
+            container = Container(app, None)
+            coro = http.run(container, _unusable_read_cb, _unusable_write_cb)
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(

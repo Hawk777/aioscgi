@@ -1,10 +1,4 @@
-"""
-The core server.
-
-The server implemented in this module runs an ASGI application.
-
-The main entry point is the run function.
-"""
+"""The HTTP protocol."""
 
 from __future__ import annotations
 

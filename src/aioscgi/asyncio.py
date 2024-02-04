@@ -10,7 +10,8 @@ import signal
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from . import core, lifespan
+from . import lifespan
+from .http import Container
 from .types import ApplicationType
 
 
@@ -21,7 +22,7 @@ def _do_nothing() -> None:
 async def _connection_wrapper(
     application: ApplicationType,
     client_connections: set[asyncio.Task[None]],
-    container: core.Container,
+    container: Container,
     state: dict[Any, Any],
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
@@ -85,7 +86,7 @@ async def _main_coroutine(
     application: ApplicationType,
     start_server_fn: Callable[..., Awaitable[asyncio.Server]],
     after_listen_cb: Callable[[], None],
-    container: core.Container,
+    container: Container,
 ) -> None:
     """
     Run the application in an asyncio event loop.
@@ -222,7 +223,7 @@ def run_tcp(
     application: ApplicationType,
     hosts: list[str] | None,
     port: int,
-    container: core.Container,
+    container: Container,
 ) -> None:
     """
     Run an application listening for SCGI connections on a TCP port.
@@ -243,9 +244,7 @@ def run_tcp(
     )
 
 
-def run_unix(
-    application: ApplicationType, path: str, container: core.Container
-) -> None:
+def run_unix(application: ApplicationType, path: str, container: Container) -> None:
     """
     Run an application listening for SCGI connections on a UNIX socket.
 

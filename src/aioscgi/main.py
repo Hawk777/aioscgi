@@ -9,7 +9,7 @@ import logging.config
 import pathlib
 import sys
 
-from . import core
+from .http import Container
 
 
 def main() -> None:
@@ -92,7 +92,7 @@ def main() -> None:
             app_callable = getattr(app_callable, part)
 
         # Run the server.
-        container = core.Container(args.base_uri)
+        container = Container(args.base_uri)
         if args.tcp_port:
             hosts = args.tcp_host
             if not hosts:

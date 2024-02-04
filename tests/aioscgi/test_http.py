@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, call, patch
 import sioscgi.request
 import sioscgi.response
 
-import aioscgi.core
+from aioscgi.http import Container
 from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
 
 
@@ -103,13 +103,13 @@ async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
     raise NotImplementedError(msg)
 
 
-class TestCore(TestCase):
+class TestHTTP(TestCase):
     """Tests the core logic."""
 
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_simple(
-        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+        self: TestHTTP, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test a simple application."""
 
@@ -173,9 +173,7 @@ class TestCore(TestCase):
         reader.next_event.side_effect = [headers, sioscgi.request.End()]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = aioscgi.core.Container(None).run(
-                app, _unusable_read_cb, _unusable_write_cb, {}
-            )
+            coro = Container(None).run(app, _unusable_read_cb, _unusable_write_cb, {})
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -199,7 +197,7 @@ class TestCore(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_multi_body(
-        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+        self: TestHTTP, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test request and response bodies transported in multiple parts."""
 
@@ -273,9 +271,7 @@ class TestCore(TestCase):
         ]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = aioscgi.core.Container(None).run(
-                app, _unusable_read_cb, _unusable_write_cb, {}
-            )
+            coro = Container(None).run(app, _unusable_read_cb, _unusable_write_cb, {})
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -310,7 +306,7 @@ class TestCore(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_disconnect_after_request(
-        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+        self: TestHTTP, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test a long polling client disconnecting before the response body is sent."""
 
@@ -364,9 +360,7 @@ class TestCore(TestCase):
 
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = aioscgi.core.Container(None).run(
-                app, raw_read_wrapper, _unusable_write_cb, {}
-            )
+            coro = Container(None).run(app, raw_read_wrapper, _unusable_write_cb, {})
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -378,7 +372,7 @@ class TestCore(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_disconnect_during_request(
-        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+        self: TestHTTP, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test a case where the client disconnects while sending the request."""
 
@@ -433,9 +427,7 @@ class TestCore(TestCase):
 
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = aioscgi.core.Container(None).run(
-                app, raw_read_wrapper, _unusable_write_cb, {}
-            )
+            coro = Container(None).run(app, raw_read_wrapper, _unusable_write_cb, {})
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -453,7 +445,7 @@ class TestCore(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_https(
-        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+        self: TestHTTP, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test that an HTTPS request is recognized as such."""
 
@@ -519,9 +511,7 @@ class TestCore(TestCase):
         reader.next_event.side_effect = [headers, sioscgi.request.End()]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = aioscgi.core.Container(None).run(
-                app, _unusable_read_cb, _unusable_write_cb, {}
-            )
+            coro = Container(None).run(app, _unusable_read_cb, _unusable_write_cb, {})
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(

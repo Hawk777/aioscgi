@@ -407,11 +407,11 @@ class Container:
 
     __slots__ = {
         "application": """The application callable.""",
-        "_base_uri": """The base URI prefix.""",
+        "base_uri": """The base URI prefix.""",
     }
 
     application: ApplicationType
-    _base_uri: str | None
+    base_uri: str | None
 
     def __init__(
         self: Container, application: ApplicationType, base_uri: str | None
@@ -425,7 +425,7 @@ class Container:
             instead.
         """
         self.application = application
-        self._base_uri = base_uri
+        self.base_uri = base_uri
 
     def run(
         self: Container,
@@ -450,5 +450,5 @@ class Container:
             before returning.
         :param state: The state dictionary that the application can use.
         """
-        i = _Instance(self.application, read_cb, write_cb, self._base_uri, state)
+        i = _Instance(self.application, read_cb, write_cb, self.base_uri, state)
         return i.run()

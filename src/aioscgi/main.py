@@ -82,7 +82,7 @@ def main() -> None:
         # Import the application module and find the callable.
         sys.path.insert(0, ".")
         app_parts = args.application.split(":")
-        if len(app_parts) != 2:  # noqa: PLR2004
+        if len(app_parts) != 2:
             parser.error(
                 "Application callable must be module name, colon, and callable name."
             )

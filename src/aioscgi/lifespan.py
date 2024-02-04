@@ -99,7 +99,30 @@ def _wrapper(application: ApplicationType, never: Awaitable[None]) -> Applicatio
 
 
 class Manager:
-    """Implements the ASGI lifespan protocol."""
+    """
+    Implements the ASGI lifespan protocol.
+
+    This class is meant for use by an I/O adapter. The intended workflow is as follows:
+    1.  The adapter constructs a Manager class. It passes the application callable
+        directly. The other awaitables and the mutex should be constructed as
+        appropriate for the I/O library. The callables should typically signal
+        awaitables that the adapter’s main task can await, again as appropriate for the
+        I/O library.
+    2.  The adapter spawns a task which runs the Manager’s run method.
+    3.  The adapter waits until the started callable is invoked (typically by the
+        started callable signalling something which the adapter’s main task is
+        awaiting). If an error message was provided, that message should be reported and
+        startup aborted.
+    4.  The adapter starts listening and running connections.
+    5.  The adapter determines it is time to shut down the server.
+    6.  The adapter stops listening.
+    7.  If appropriate, the adapter waits for ongoing connections to complete. Otherwise
+        it may choose to cancel them.
+    8.  The adapter causes the awaitable passed as shutting_down to become ready.
+    9.  The adapter waits until the shutdown_complete callable is invoked. If an error
+        message was provided, that message should be reported.
+    10. The adapter waits until the task which called the run method completes.
+    """
 
     __slots__ = {
         "_wrapped_application": """The application, wrapped for exception handling.""",

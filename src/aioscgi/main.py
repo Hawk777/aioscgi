@@ -87,18 +87,21 @@ def main() -> None:
                 "Application callable must be module name, colon, and callable name."
             )
         app_module = importlib.import_module(app_parts[0])
-        app_callable = app_module
+        app_callable = None
         for part in app_parts[1].split("."):
-            app_callable = getattr(app_callable, part)
+            app_callable = getattr(
+                app_callable if app_callable is not None else app_module, part
+            )
+        assert app_callable is not None
 
         # Run the server.
-        container = Container(args.base_uri)
+        container = Container(app_callable, args.base_uri)
         if args.tcp_port:
             hosts = args.tcp_host
             if not hosts:
                 hosts = None
-            adapter.run_tcp(app_callable, hosts, args.tcp_port, container)
+            adapter.run_tcp(hosts, args.tcp_port, container)
         else:
-            adapter.run_unix(app_callable, args.unix_socket, container)
+            adapter.run_unix(args.unix_socket, container)
     finally:
         logging.shutdown()

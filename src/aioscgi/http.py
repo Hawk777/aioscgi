@@ -406,24 +406,29 @@ class Container:
     """An ASGI container."""
 
     __slots__ = {
+        "application": """The application callable.""",
         "_base_uri": """The base URI prefix.""",
     }
 
+    application: ApplicationType
     _base_uri: str | None
 
-    def __init__(self: Container, base_uri: str | None) -> None:
+    def __init__(
+        self: Container, application: ApplicationType, base_uri: str | None
+    ) -> None:
         """
         Construct a new ASGI container.
 
+        :param application: The application callable.
         :param base_uri: The request URI prefix to the base of the application for
             computing root_path and path, or None to use SCRIPT_NAME and PATH_INFO
             instead.
         """
+        self.application = application
         self._base_uri = base_uri
 
     def run(
         self: Container,
-        application: ApplicationType,
         read_cb: Callable[[], Awaitable[bytes]],
         write_cb: Callable[[bytes, bool], Awaitable[None]],
         state: dict[Any, Any],
@@ -436,7 +441,6 @@ class Container:
         The caller is expected to close the connection to the SCGI client after this
         function returns.
 
-        :param application: The application callable.
         :param read_cb: A coroutine which accepts no parameters and, when called,
             returns a bytes received from the SCGI client, or an empty bytes if the SCGI
             client has closed the connection.
@@ -446,5 +450,5 @@ class Container:
             before returning.
         :param state: The state dictionary that the application can use.
         """
-        i = _Instance(application, read_cb, write_cb, self._base_uri, state)
+        i = _Instance(self.application, read_cb, write_cb, self._base_uri, state)
         return i.run()

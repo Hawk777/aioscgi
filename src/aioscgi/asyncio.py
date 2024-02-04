@@ -12,7 +12,6 @@ from typing import Any
 
 from . import lifespan
 from .http import Container
-from .types import ApplicationType
 
 
 def _do_nothing() -> None:
@@ -20,7 +19,6 @@ def _do_nothing() -> None:
 
 
 async def _connection_wrapper(
-    application: ApplicationType,
     client_connections: set[asyncio.Task[None]],
     container: Container,
     state: dict[Any, Any],
@@ -34,7 +32,6 @@ async def _connection_wrapper(
     with the ``application`` and ``client_connections`` parameters bound via a
     ``functools.partial`` or similar.
 
-    :param application: The ASGI application.
     :param client_connections: A set of Task objects, to which this connection is added
         on entry to and removed on exit from this function.
     :param container: The ASGI container to use.
@@ -58,7 +55,6 @@ async def _connection_wrapper(
 
             # Run the application.
             await container.run(
-                application,
                 functools.partial(reader.read, io.DEFAULT_BUFFER_SIZE),
                 write_cb,
                 state,
@@ -83,7 +79,6 @@ async def _connection_wrapper(
 
 
 async def _main_coroutine(
-    application: ApplicationType,
     start_server_fn: Callable[..., Awaitable[asyncio.Server]],
     after_listen_cb: Callable[[], None],
     container: Container,
@@ -129,7 +124,7 @@ async def _main_coroutine(
     lifespan_shutting_down = loop.create_future()
     lifespan_shutdown_complete = loop.create_future()
     lifespan_manager = lifespan.Manager(
-        application,
+        container.application,
         loop.create_future(),
         asyncio.Lock(),
         state,
@@ -154,7 +149,6 @@ async def _main_coroutine(
             srv = await start_server_fn(
                 functools.partial(
                     _connection_wrapper,
-                    application,
                     client_connections,
                     container,
                     state,
@@ -220,7 +214,6 @@ async def _main_coroutine(
 
 
 def run_tcp(
-    application: ApplicationType,
     hosts: list[str] | None,
     port: int,
     container: Container,
@@ -228,7 +221,6 @@ def run_tcp(
     """
     Run an application listening for SCGI connections on a TCP port.
 
-    :param application: The application callable.
     :param hosts: The list of list of hosts to bind to, or None to bind to all
         interfaces.
     :param port: The port number.
@@ -236,7 +228,6 @@ def run_tcp(
     """
     asyncio.run(
         _main_coroutine(
-            application,
             functools.partial(asyncio.start_server, host=hosts, port=port),
             _do_nothing,
             container,
@@ -244,7 +235,7 @@ def run_tcp(
     )
 
 
-def run_unix(application: ApplicationType, path: str, container: Container) -> None:
+def run_unix(path: str, container: Container) -> None:
     """
     Run an application listening for SCGI connections on a UNIX socket.
 
@@ -254,13 +245,11 @@ def run_unix(application: ApplicationType, path: str, container: Container) -> N
     permissive mode and then chmodding it afterward leaves an undesirable race
     condition.
 
-    :param application: The application callable.
     :param path: The filename of the socket to listen on.
     :param container: The ASGI container to use.
     """
     asyncio.run(
         _main_coroutine(
-            application,
             functools.partial(asyncio.start_unix_server, path=path),
             functools.partial(os.chmod, path, 0o666),
             container,

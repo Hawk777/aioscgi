@@ -173,7 +173,7 @@ class TestHTTP(TestCase):
         reader.next_event.side_effect = [headers, sioscgi.request.End()]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = Container(None).run(app, _unusable_read_cb, _unusable_write_cb, {})
+            coro = Container(app, None).run(_unusable_read_cb, _unusable_write_cb, {})
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -271,7 +271,7 @@ class TestHTTP(TestCase):
         ]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = Container(None).run(app, _unusable_read_cb, _unusable_write_cb, {})
+            coro = Container(app, None).run(_unusable_read_cb, _unusable_write_cb, {})
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -360,7 +360,7 @@ class TestHTTP(TestCase):
 
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = Container(None).run(app, raw_read_wrapper, _unusable_write_cb, {})
+            coro = Container(app, None).run(raw_read_wrapper, _unusable_write_cb, {})
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -427,7 +427,7 @@ class TestHTTP(TestCase):
 
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = Container(None).run(app, raw_read_wrapper, _unusable_write_cb, {})
+            coro = Container(app, None).run(raw_read_wrapper, _unusable_write_cb, {})
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -511,7 +511,7 @@ class TestHTTP(TestCase):
         reader.next_event.side_effect = [headers, sioscgi.request.End()]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = Container(None).run(app, _unusable_read_cb, _unusable_write_cb, {})
+            coro = Container(app, None).run(_unusable_read_cb, _unusable_write_cb, {})
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(

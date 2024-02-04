@@ -10,7 +10,7 @@ import signal
 from collections.abc import Awaitable, Callable
 
 from . import http, lifespan
-from .http import Container
+from .container import Container
 
 
 def _do_nothing() -> None:

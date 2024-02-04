@@ -11,7 +11,8 @@ from typing import Any
 import sioscgi.request
 import sioscgi.response
 
-from .types import ApplicationType, EventOrScope
+from .container import Container
+from .types import EventOrScope
 
 
 def _calc_http_version(server_protocol: bytes) -> str:
@@ -386,35 +387,6 @@ class _Instance:
                 # ASGI spec says send on closed connection must be no-op.
                 logging.getLogger(__name__).debug("SCGI socket broken on write")
                 self._disconnected = True
-
-
-class Container:
-    """An ASGI container."""
-
-    __slots__ = {
-        "application": """The application callable.""",
-        "base_uri": """The base URI prefix.""",
-        "state": """The application state dictionary.""",
-    }
-
-    application: ApplicationType
-    base_uri: str | None
-    state: dict[Any, Any]
-
-    def __init__(
-        self: Container, application: ApplicationType, base_uri: str | None
-    ) -> None:
-        """
-        Construct a new ASGI container.
-
-        :param application: The application callable.
-        :param base_uri: The request URI prefix to the base of the application for
-            computing root_path and path, or None to use SCRIPT_NAME and PATH_INFO
-            instead.
-        """
-        self.application = application
-        self.base_uri = base_uri
-        self.state = {}
 
 
 def run(

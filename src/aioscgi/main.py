@@ -9,7 +9,7 @@ import logging.config
 import pathlib
 import sys
 
-from .http import Container
+from .container import Container
 
 
 def main() -> None:

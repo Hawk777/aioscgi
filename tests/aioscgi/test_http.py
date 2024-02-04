@@ -11,7 +11,7 @@ import sioscgi.request
 import sioscgi.response
 
 from aioscgi import http
-from aioscgi.http import Container
+from aioscgi.container import Container
 from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
 
 

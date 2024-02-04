@@ -10,7 +10,7 @@ import signal
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from . import core
+from . import core, lifespan
 from .types import ApplicationType
 
 
@@ -127,7 +127,7 @@ async def _main_coroutine(
     lifespan_started = loop.create_future()
     lifespan_shutting_down = loop.create_future()
     lifespan_shutdown_complete = loop.create_future()
-    lifespan_manager = core.LifespanManager(
+    lifespan_manager = lifespan.Manager(
         application,
         loop.create_future(),
         asyncio.Lock(),

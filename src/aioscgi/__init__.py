@@ -1,10 +1,9 @@
 """
 An ASGI server that speaks SCGI.
 
-aioscgi is designed as a core server (aioscgi.core.run) plus a set of I/O
-adapters. The core is designed to be asynchronous but agnostic to the
-asynchronous framework in use; thus, an I/O adapter is used to connect the core
-to an actual I/O implementation, such as asyncio.
+aioscgi is designed as a set of core protocol handlers which are asynchronous but
+agnostic to the choice of asynchronous framework in use, plus a set of I/O adapters
+which connect the protocol handlers to a specific I/O framework (such as asyncio).
 
 I/O adapters are setuptools entry points in the aioscgi.io group, allowing
 other packages to add their own. An adapter must expose functions

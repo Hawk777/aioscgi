@@ -11,48 +11,11 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from . import core
-from .types import ApplicationType, EventOrScope
+from .types import ApplicationType
 
 
 def _do_nothing() -> None:
     """Do nothing."""
-
-
-async def _lifespan_coro(
-    application: ApplicationType,
-    lifespan_manager: core.LifespanManager,
-    send: Callable[[EventOrScope | None], Awaitable[None]],
-    receive: Callable[[], Awaitable[EventOrScope]],
-) -> None:
-    """
-    Wrap the application coroutine for delivering lifespan protocol events.
-
-    :param application: The application coroutine.
-    :param lifespan_manager: The lifespan manager to interact with.
-    :param send: A coroutine that, when invoked, sends a value somewhere where the
-        LifespanManager’s receive callback can receive it.
-    :param receive: A coroutine that, when invoked, waits until the LifespanManager’s
-        send callback is invoked and then returns the value thus sent.
-    """
-
-    # Wrap the send callable in an extra layer that validates the message before sending
-    # it.
-    def send_wrapper(event: EventOrScope) -> Awaitable[None]:
-        core.LifespanManager.check_application_event(event)
-        return send(event)
-
-    # Run the application callback. If it returns normally, don’t do anything: while
-    # unlikely, it is theoretically possible that the application could have passed its
-    # send and receive callables over to another task which is now responsible for
-    # handling the lifespan protocol. However, if it returns by raising an exception,
-    # then send None, signalling to the LifespanManager that this happened.
-    try:
-        await application(lifespan_manager.scope, receive, send_wrapper)
-    except Exception as exp:  # pylint: disable=broad-except # noqa: BLE001
-        logging.getLogger(__name__).debug(
-            "Application coroutine raised exception %s for lifespan protocol", exp
-        )
-        await send(None)
 
 
 async def _connection_wrapper(
@@ -161,25 +124,28 @@ async def _main_coroutine(
     state: dict[Any, Any] = {}
 
     # Start up the lifespan protocol.
-    lifespan_app_to_framework_queue: asyncio.Queue[
-        EventOrScope | None
-    ] = asyncio.Queue()
-    lifespan_framework_to_app_queue: asyncio.Queue[EventOrScope] = asyncio.Queue()
+    lifespan_started = loop.create_future()
+    lifespan_shutting_down = loop.create_future()
+    lifespan_shutdown_complete = loop.create_future()
     lifespan_manager = core.LifespanManager(
-        lifespan_framework_to_app_queue.put, lifespan_app_to_framework_queue.get, state
+        application,
+        loop.create_future(),
+        asyncio.Lock(),
+        state,
+        lifespan_started.set_result,
+        lifespan_shutting_down,
+        lifespan_shutdown_complete.set_result,
     )
-    lifespan_future = asyncio.ensure_future(
-        _lifespan_coro(
-            application,
-            lifespan_manager,
-            lifespan_app_to_framework_queue.put,
-            lifespan_framework_to_app_queue.get,
-        )
-    )
+    lifespan_future = asyncio.ensure_future(lifespan_manager.run())
 
     try:
-        # Start up the application.
-        await lifespan_manager.startup()
+        # Wait for the application to start.
+        startup_error = await lifespan_started
+        if startup_error is not None:
+            logging.getLogger(__name__).error(
+                "Application startup failed: %s", startup_error
+            )
+            return
 
         try:
             # Start the server and, if provided, run the after listen callback.
@@ -224,7 +190,12 @@ async def _main_coroutine(
             logging.getLogger(__name__).info("All client connections closed")
         finally:
             # Shut down the application.
-            await lifespan_manager.shutdown()
+            lifespan_shutting_down.set_result(None)
+            shutdown_error = await lifespan_shutdown_complete
+            if shutdown_error is not None:
+                logging.getLogger(__name__).error(
+                    "Application shutdown failed: %s", shutdown_error
+                )
             await lifespan_future
     finally:
         # Cancel all the running tasks except myself, thus allowing them to clean up

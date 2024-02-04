@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import wsgiref.headers
 from collections.abc import Coroutine
 from unittest import TestCase
@@ -544,178 +545,340 @@ class TestCore(TestCase):
 
     def test_lifespan_startup_successful(self: TestCore) -> None:
         """Test successful application startup using the lifespan protocol."""
-        # Create a mock queue and send and receive async callables that access it.
-        mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [{"type": "lifespan.startup.complete"}]
 
-        async def send(event: EventOrScope) -> None:
-            mock_queue.send(event)
+        async def impl() -> None:
+            # Create the application.
+            startup_seen = False
+            shutdown_seen = False
 
-        async def receive() -> EventOrScope | None:
-            ret = mock_queue.receive()
-            assert isinstance(ret, dict)
-            return ret
+            async def app(
+                scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+            ) -> None:
+                nonlocal startup_seen, shutdown_seen
+                assert scope["type"] == "lifespan"
+                event = await receive()
+                assert event["type"] == "lifespan.startup"
+                startup_seen = True
+                await send({"type": "lifespan.startup.complete"})
 
-        # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive, {})
+            # Create the lifespan manager.
+            loop = asyncio.get_running_loop()
+            started_called = False
 
-        # At this point, nothing should have been done with the queue.
-        self.assertFalse(mock_queue.mock_calls)
+            def started(error_message: str | None) -> None:
+                nonlocal started_called
+                assert error_message is None
+                started_called = True
 
-        # Run the lifespan startup process. It should return normally.
-        with self.assertRaises(StopIteration):
-            uut.startup().send(None)
+            def shutdown_complete(_error_message: str | None) -> None:
+                raise NotImplementedError
 
-        # The lifespan manager should send the lifespan.startup event, then wait for the
-        # application to send the complete message before returning.
-        self.assertEqual(
-            mock_queue.mock_calls,
-            [call.send({"type": "lifespan.startup"}), call.receive()],
-        )
+            uut = aioscgi.core.LifespanManager(
+                app,
+                loop.create_future(),
+                asyncio.Lock(),
+                {},
+                started,
+                loop.create_future(),
+                shutdown_complete,
+            )
+
+            # At this point, nothing should have happened.
+            self.assertFalse(startup_seen)
+            self.assertFalse(started_called)
+            self.assertFalse(shutdown_seen)
+
+            # Fork off a task.
+            uut_future = asyncio.ensure_future(uut.run())
+
+            # Let the task run.
+            await asyncio.sleep(0)
+
+            # At this point, startup should have finished.
+            self.assertTrue(startup_seen)
+            self.assertTrue(started_called)
+            self.assertFalse(shutdown_seen)
+
+            # The lifespan manager should keep running after a successful start, so
+            # cancel it.
+            uut_future.cancel()
+            await uut_future
+
+        asyncio.run(impl())
 
     def test_lifespan_startup_failed(self: TestCore) -> None:
         """Test failed application startup using the lifespan protocol."""
-        # Create a mock queue and send and receive async callables that access it.
-        mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [
-            {
-                "type": "lifespan.startup.failed",
-                "message": "Application failure message",
-            }
-        ]
 
-        async def send(event: EventOrScope) -> None:
-            mock_queue.send(event)
+        async def impl() -> None:
+            # Create the application.
+            startup_seen = False
+            shutdown_seen = False
 
-        async def receive() -> EventOrScope | None:
-            ret = mock_queue.receive()
-            assert isinstance(ret, dict)
-            return ret
+            async def app(
+                scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+            ) -> None:
+                nonlocal startup_seen, shutdown_seen
+                assert scope["type"] == "lifespan"
+                event = await receive()
+                assert event["type"] == "lifespan.startup"
+                startup_seen = True
+                await send({"type": "lifespan.startup.failed", "message": "FOO"})
 
-        # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive, {})
+            # Create the lifespan manager.
+            loop = asyncio.get_running_loop()
+            started_called = False
 
-        # At this point, nothing should have been done with the queue.
-        self.assertFalse(mock_queue.mock_calls)
+            def started(error_message: str | None) -> None:
+                nonlocal started_called
+                assert error_message == "FOO"
+                started_called = True
 
-        # Run the lifespan startup process. It should raise an exception, passing on the
-        # message from the application.
-        with self.assertRaises(
-            aioscgi.core.ApplicationInitializationError,
-            msg="Application failure message",
-        ):
-            uut.startup().send(None)
+            def shutdown_complete(_error_message: str | None) -> None:
+                raise NotImplementedError
 
-        # The lifespan manager should send the lifespan.startup event, then wait for the
-        # application to send the failure message before raising its own exception.
-        self.assertEqual(
-            mock_queue.mock_calls,
-            [call.send({"type": "lifespan.startup"}), call.receive()],
-        )
+            uut = aioscgi.core.LifespanManager(
+                app,
+                loop.create_future(),
+                asyncio.Lock(),
+                {},
+                started,
+                loop.create_future(),
+                shutdown_complete,
+            )
+
+            # At this point, nothing should have happened.
+            self.assertFalse(startup_seen)
+            self.assertFalse(started_called)
+            self.assertFalse(shutdown_seen)
+
+            # Fork off a task.
+            uut_future = asyncio.ensure_future(uut.run())
+
+            # Let the task run.
+            await asyncio.sleep(0)
+
+            # At this point, startup should have finished.
+            self.assertTrue(startup_seen)
+            self.assertTrue(started_called)
+            self.assertFalse(shutdown_seen)
+
+            # The lifespan manager should return promptly after failed startup.
+            await uut_future
+
+        asyncio.run(impl())
 
     def test_lifespan_shutdown_successful(self: TestCore) -> None:
         """Test successful application shutdown using the lifespan protocol."""
-        # Create a mock queue and send and receive async callables that access it.
-        mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [{"type": "lifespan.shutdown.complete"}]
 
-        async def send(event: EventOrScope) -> None:
-            mock_queue.send(event)
+        async def impl() -> None:
+            # Create the application.
+            shutdown_seen = False
 
-        async def receive() -> EventOrScope | None:
-            ret = mock_queue.receive()
-            assert isinstance(ret, dict)
-            return ret
+            async def app(
+                scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+            ) -> None:
+                nonlocal shutdown_seen
+                assert scope["type"] == "lifespan"
+                event = await receive()
+                assert event["type"] == "lifespan.startup"
+                await send({"type": "lifespan.startup.complete"})
+                event = await receive()
+                assert event["type"] == "lifespan.shutdown"
+                shutdown_seen = True
+                await send({"type": "lifespan.shutdown.complete"})
 
-        # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive, {})
+            # Create the lifespan manager.
+            loop = asyncio.get_running_loop()
 
-        # At this point, nothing should have been done with the queue.
-        self.assertFalse(mock_queue.mock_calls)
+            def started(error_message: str | None) -> None:
+                assert error_message is None
 
-        # Run the lifespan shutdown process. It should return normally.
-        with self.assertRaises(StopIteration):
-            uut.shutdown().send(None)
+            shutdown_complete_called = False
 
-        # The lifespan manager should send the lifespan.shutdown event, then wait for
-        # the application to send the complete message before returning.
-        self.assertEqual(
-            mock_queue.mock_calls,
-            [call.send({"type": "lifespan.shutdown"}), call.receive()],
-        )
+            def shutdown_complete(error_message: str | None) -> None:
+                nonlocal shutdown_complete_called
+                assert error_message is None
+                shutdown_complete_called = True
+
+            shutting_down = loop.create_future()
+            uut = aioscgi.core.LifespanManager(
+                app,
+                loop.create_future(),
+                asyncio.Lock(),
+                {},
+                started,
+                shutting_down,
+                shutdown_complete,
+            )
+
+            # At this point, nothing should have happened.
+            self.assertFalse(shutdown_seen)
+            self.assertFalse(shutdown_complete_called)
+
+            # Fork off a task.
+            uut_future = asyncio.ensure_future(uut.run())
+
+            # Let the task run.
+            await asyncio.sleep(0)
+
+            # At this point, startup should have finished, but shutdown should not have
+            # started.
+            self.assertFalse(shutdown_seen)
+            self.assertFalse(shutdown_complete_called)
+
+            # Initiate shutdown.
+            shutting_down.set_result(None)
+
+            # Let the task run.
+            await asyncio.sleep(0)
+
+            # At this point, shutdown should have finished.
+            self.assertTrue(shutdown_seen)
+            self.assertTrue(shutdown_complete_called)
+
+            # The lifespan manager should return promptly after shutdown.
+            await uut_future
+
+        asyncio.run(impl())
 
     def test_lifespan_shutdown_failed(self: TestCore) -> None:
         """Test failed application shutdown using the lifespan protocol."""
-        # Create a mock queue and send and receive async callables that access it.
-        mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [
-            {
-                "type": "lifespan.shutdown.failed",
-                "message": "Application failure message",
-            }
-        ]
 
-        async def send(event: EventOrScope) -> None:
-            mock_queue.send(event)
+        async def impl() -> None:
+            # Create the application.
+            shutdown_seen = False
 
-        async def receive() -> EventOrScope | None:
-            ret = mock_queue.receive()
-            assert isinstance(ret, dict)
-            return ret
+            async def app(
+                scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+            ) -> None:
+                nonlocal shutdown_seen
+                assert scope["type"] == "lifespan"
+                event = await receive()
+                assert event["type"] == "lifespan.startup"
+                await send({"type": "lifespan.startup.complete"})
+                event = await receive()
+                assert event["type"] == "lifespan.shutdown"
+                shutdown_seen = True
+                await send({"type": "lifespan.shutdown.failed", "message": "FOO"})
 
-        # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive, {})
+            # Create the lifespan manager.
+            loop = asyncio.get_running_loop()
 
-        # At this point, nothing should have been done with the queue.
-        self.assertFalse(mock_queue.mock_calls)
+            def started(error_message: str | None) -> None:
+                assert error_message is None
 
-        # Run the lifespan shutdown process. It should return normally, because
-        # application failures during shutdown don’t really benefit from being reraised
-        # at the call site.
-        with self.assertRaises(StopIteration):
-            uut.shutdown().send(None)
+            shutdown_complete_called = False
 
-        # The lifespan manager should send the lifespan.startup event, then wait for the
-        # application to send the failure message before raising its own exception.
-        self.assertEqual(
-            mock_queue.mock_calls,
-            [call.send({"type": "lifespan.shutdown"}), call.receive()],
-        )
+            def shutdown_complete(error_message: str | None) -> None:
+                nonlocal shutdown_complete_called
+                assert error_message == "FOO"
+                shutdown_complete_called = True
+
+            shutting_down = loop.create_future()
+            uut = aioscgi.core.LifespanManager(
+                app,
+                loop.create_future(),
+                asyncio.Lock(),
+                {},
+                started,
+                shutting_down,
+                shutdown_complete,
+            )
+
+            # At this point, nothing should have happened.
+            self.assertFalse(shutdown_seen)
+            self.assertFalse(shutdown_complete_called)
+
+            # Fork off a task.
+            uut_future = asyncio.ensure_future(uut.run())
+
+            # Let the task run.
+            await asyncio.sleep(0)
+
+            # At this point, startup should have finished, but shutdown should not have
+            # started.
+            self.assertFalse(shutdown_seen)
+            self.assertFalse(shutdown_complete_called)
+
+            # Initiate shutdown.
+            shutting_down.set_result(None)
+
+            # Let the task run.
+            await asyncio.sleep(0)
+
+            # At this point, shutdown should have finished.
+            self.assertTrue(shutdown_seen)
+            self.assertTrue(shutdown_complete_called)
+
+            # The lifespan manager should return promptly after shutdown.
+            await uut_future
+
+        asyncio.run(impl())
 
     def test_lifespan_not_supported(self: TestCore) -> None:
         """Test an application not supporting the lifespan protocol."""
-        # Create a mock queue and send and receive async callables that access it.
-        mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [None]
 
-        async def send(event: EventOrScope) -> None:
-            mock_queue.send(event)
+        async def impl() -> None:
+            # Create the application.
+            async def app(
+                _scope: EventOrScope, _receive: ReceiveFunction, _send: SendFunction
+            ) -> None:
+                msg = "Lifespan protocol not supported"
+                raise ValueError(msg)
 
-        async def receive() -> EventOrScope | None:
-            ret = mock_queue.receive()
-            assert ret is None
-            return ret
+            # Create the lifespan manager.
+            loop = asyncio.get_running_loop()
+            started_called = False
 
-        # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive, {})
+            def started(error_message: str | None) -> None:
+                nonlocal started_called
+                assert error_message is None
+                started_called = True
 
-        # At this point, nothing should have been done with the queue.
-        self.assertFalse(mock_queue.mock_calls)
+            shutdown_complete_called = False
 
-        # Run the lifespan startup process. It should return normally. Lack of support
-        # from the application should not be considered an error.
-        with self.assertRaises(StopIteration):
-            uut.startup().send(None)
+            def shutdown_complete(error_message: str | None) -> None:
+                nonlocal shutdown_complete_called
+                assert error_message is None
+                shutdown_complete_called = True
 
-        # Run the lifespan shutdown process. It should return normally, without doing
-        # anything, because of the earlier indication of no support.
-        with self.assertRaises(StopIteration):
-            uut.shutdown().send(None)
+            shutting_down = loop.create_future()
+            uut = aioscgi.core.LifespanManager(
+                app,
+                loop.create_future(),
+                asyncio.Lock(),
+                {},
+                started,
+                shutting_down,
+                shutdown_complete,
+            )
 
-        # The lifespan manager should send the lifespan.startup event, then receive the
-        # indication of no support (representing the application callback raising an
-        # exception), then not interact with the queue again afterwards.
-        self.assertEqual(
-            mock_queue.mock_calls,
-            [call.send({"type": "lifespan.startup"}), call.receive()],
-        )
+            # At this point, nothing should have happened.
+            self.assertFalse(started_called)
+            self.assertFalse(shutdown_complete_called)
+
+            # Fork off a task.
+            uut_future = asyncio.ensure_future(uut.run())
+
+            # Let the task run.
+            await asyncio.sleep(0)
+
+            # At this point, startup should have finished, but shutdown should not have
+            # started.
+            self.assertTrue(started_called)
+            self.assertFalse(shutdown_complete_called)
+
+            # Initiate shutdown.
+            shutting_down.set_result(None)
+
+            # Let the task run.
+            await asyncio.sleep(0)
+
+            # At this point, shutdown should have finished.
+            self.assertTrue(started_called)
+            self.assertTrue(shutdown_complete_called)
+
+            # The lifespan manager should return promptly after shutdown.
+            await uut_future
+
+        asyncio.run(impl())

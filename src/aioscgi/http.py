@@ -5,7 +5,7 @@ from __future__ import annotations
 import http
 import logging
 import wsgiref.util
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 import sioscgi.request
@@ -100,6 +100,110 @@ def _calc_status(status: int) -> str:
     return f"{status} {phrase}"
 
 
+def _make_scope(
+    base_uri: str | None, state: dict[Any, Any], environ: Mapping[str, bytes]
+) -> EventOrScope | None:
+    """
+    Convert a CGI/SCGI environment mapping into an ASGI HTTP scope dictionary.
+
+    :param base_uri: The request URI prefix to the base of the application for computing
+        root_path and path, or None to use SCRIPT_NAME and PATH_INFO instead.
+    :param state: The application state dictionary.
+    :param environ: The CGI/SCGI environment mapping.
+    :return: The HTTP scope, or None if the request is malformed, in which case an error
+        has been logged and the caller should not run the ASGI application.
+    """
+    # Uppercase keys in the environment (the CGI specification states that they are
+    # case-insensitive, and this makes subsequent code easier).
+    environ = {k.upper(): v for k, v in environ.items()}
+
+    # Figure out paths.
+    if base_uri is not None:
+        # A base path was given explicitly. The request URI must begin with the base
+        # path (otherwise the request cannot be handled), and root_path should be
+        # the given base path while path should be the entire request URI. This form
+        # is useful for HTTP servers that don’t set SCRIPT_NAME and PATH_INFO
+        # properly.
+        request_uri = environ["REQUEST_URI"]
+        try:
+            path = request_uri.decode("UTF-8")
+        except UnicodeDecodeError:
+            logging.getLogger(__name__).error(
+                "REQUEST_URI %s is not valid UTF-8", request_uri
+            )
+            return None
+        if not path.startswith(base_uri):
+            logging.getLogger(__name__).error(
+                'REQUEST_URI "%s" does not start with specified base URI "%s"',
+                path,
+                base_uri,
+            )
+            return None
+        root_path = base_uri
+    else:
+        # No base path was given. The HTTP server is to be trusted to break down the
+        # request into a part designating the application (called SCRIPT_NAME in CGI
+        # and root_path in ASGI) and a part designating an entity within the
+        # application (called PATH_INFO in CGI, and the portion of path following
+        # root_path in ASGI).
+        script_name = environ["SCRIPT_NAME"]
+        try:
+            root_path = script_name.decode("UTF-8")
+        except UnicodeDecodeError:
+            logging.getLogger(__name__).error(
+                "SCRIPT_NAME %s is not valid UTF-8", script_name
+            )
+            return None
+        path_info = environ.get("PATH_INFO", b"")
+        try:
+            path = root_path + path_info.decode("UTF-8")
+        except UnicodeDecodeError:
+            logging.getLogger(__name__).error(
+                "PATH_INFO %s is not valid UTF-8", path_info
+            )
+            return None
+
+    # UTF-8-decode the REQUEST_METHOD and SERVER_NAME fields.
+    request_method = environ["REQUEST_METHOD"]
+    try:
+        request_method_str = request_method.decode("UTF-8")
+    except UnicodeDecodeError:
+        logging.getLogger(__name__).error(
+            "REQUEST_METHOD %s is invalid UTF-8", request_method
+        )
+        return None
+    server_name = environ["SERVER_NAME"]
+    try:
+        server_name_str = server_name.decode("UTF-8")
+    except UnicodeDecodeError:
+        logging.getLogger(__name__).error(
+            "SERVER_NAME %s is invalid UTF-8", server_name
+        )
+        return None
+
+    # Build a scope dictionary.
+    return {
+        "type": "http",
+        "asgi": {
+            "version": "3.0",
+            "spec_version": "2.3",
+        },
+        "http_version": _calc_http_version(environ["SERVER_PROTOCOL"]),
+        "method": request_method_str.upper(),
+        "scheme": _guess_scheme(environ),
+        "path": path,
+        "query_string": environ["QUERY_STRING"],
+        "root_path": root_path,
+        "headers": _calc_http_headers(environ),
+        "client": _calc_client(environ),
+        "server": [server_name_str, int(environ["SERVER_PORT"])],
+        "extensions": {
+            "environ": environ,
+        },
+        "state": state,
+    }
+
+
 class _Instance:
     """The handler for one accepted connection."""
 
@@ -179,95 +283,10 @@ class _Instance:
                 assert isinstance(event, sioscgi.request.Headers)
                 environ = event.environment
 
-        # Uppercase keys in the environment (the CGI specification states that they are
-        # case-insensitive, and this makes subsequent code easier).
-        environ = {k.upper(): v for k, v in environ.items()}
-
-        # Figure out paths.
-        if self._base_uri is not None:
-            # A base path was given explicitly. The request URI must begin with the base
-            # path (otherwise the request cannot be handled), and root_path should be
-            # the given base path while path should be the entire request URI. This form
-            # is useful for HTTP servers that don’t set SCRIPT_NAME and PATH_INFO
-            # properly.
-            request_uri = environ["REQUEST_URI"]
-            try:
-                path = request_uri.decode("UTF-8")
-            except UnicodeDecodeError:
-                logging.getLogger(__name__).error(
-                    "REQUEST_URI %s is not valid UTF-8", request_uri
-                )
-                return
-            if not path.startswith(self._base_uri):
-                logging.getLogger(__name__).error(
-                    'REQUEST_URI "%s" does not start with specified base URI "%s"',
-                    path,
-                    self._base_uri,
-                )
-                return
-            root_path = self._base_uri
-        else:
-            # No base path was given. The HTTP server is to be trusted to break down the
-            # request into a part designating the application (called SCRIPT_NAME in CGI
-            # and root_path in ASGI) and a part designating an entity within the
-            # application (called PATH_INFO in CGI, and the portion of path following
-            # root_path in ASGI).
-            script_name = environ["SCRIPT_NAME"]
-            try:
-                root_path = script_name.decode("UTF-8")
-            except UnicodeDecodeError:
-                logging.getLogger(__name__).error(
-                    "SCRIPT_NAME %s is not valid UTF-8", script_name
-                )
-                return
-            path_info = environ.get("PATH_INFO", b"")
-            try:
-                path = root_path + path_info.decode("UTF-8")
-            except UnicodeDecodeError:
-                logging.getLogger(__name__).error(
-                    "PATH_INFO %s is not valid UTF-8", path_info
-                )
-                return
-
-        # UTF-8-decode the REQUEST_METHOD and SERVER_NAME fields.
-        request_method = environ["REQUEST_METHOD"]
-        try:
-            request_method_str = request_method.decode("UTF-8")
-        except UnicodeDecodeError:
-            logging.getLogger(__name__).error(
-                "REQUEST_METHOD %s is invalid UTF-8", request_method
-            )
-            return
-        server_name = environ["SERVER_NAME"]
-        try:
-            server_name_str = server_name.decode("UTF-8")
-        except UnicodeDecodeError:
-            logging.getLogger(__name__).error(
-                "SERVER_NAME %s is invalid UTF-8", server_name
-            )
-            return
-
         # Build a scope dictionary.
-        scope: EventOrScope = {
-            "type": "http",
-            "asgi": {
-                "version": "3.0",
-                "spec_version": "2.3",
-            },
-            "http_version": _calc_http_version(environ["SERVER_PROTOCOL"]),
-            "method": request_method_str.upper(),
-            "scheme": _guess_scheme(environ),
-            "path": path,
-            "query_string": environ["QUERY_STRING"],
-            "root_path": root_path,
-            "headers": _calc_http_headers(environ),
-            "client": _calc_client(environ),
-            "server": [server_name_str, int(environ["SERVER_PORT"])],
-            "extensions": {
-                "environ": environ,
-            },
-            "state": self._state,
-        }
+        scope: EventOrScope | None = _make_scope(self._base_uri, self._state, environ)
+        if scope is None:
+            return
 
         # Run the application.
         logging.getLogger(__name__).debug("Starting application with scope %s", scope)

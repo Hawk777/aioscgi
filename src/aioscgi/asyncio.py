@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from . import core
+from .types import ApplicationType, EventOrScope
 
 
 def _do_nothing() -> None:
@@ -18,10 +19,10 @@ def _do_nothing() -> None:
 
 
 async def _lifespan_coro(
-    application: core.ApplicationType,
+    application: ApplicationType,
     lifespan_manager: core.LifespanManager,
-    send: Callable[[core.EventOrScope | None], Awaitable[None]],
-    receive: Callable[[], Awaitable[core.EventOrScope]],
+    send: Callable[[EventOrScope | None], Awaitable[None]],
+    receive: Callable[[], Awaitable[EventOrScope]],
 ) -> None:
     """
     Wrap the application coroutine for delivering lifespan protocol events.
@@ -36,7 +37,7 @@ async def _lifespan_coro(
 
     # Wrap the send callable in an extra layer that validates the message before sending
     # it.
-    def send_wrapper(event: core.EventOrScope) -> Awaitable[None]:
+    def send_wrapper(event: EventOrScope) -> Awaitable[None]:
         core.LifespanManager.check_application_event(event)
         return send(event)
 
@@ -55,7 +56,7 @@ async def _lifespan_coro(
 
 
 async def _connection_wrapper(
-    application: core.ApplicationType,
+    application: ApplicationType,
     client_connections: set[asyncio.Task[None]],
     container: core.Container,
     state: dict[Any, Any],
@@ -118,7 +119,7 @@ async def _connection_wrapper(
 
 
 async def _main_coroutine(
-    application: core.ApplicationType,
+    application: ApplicationType,
     start_server_fn: Callable[..., Awaitable[asyncio.Server]],
     after_listen_cb: Callable[[], None],
     container: core.Container,
@@ -161,9 +162,9 @@ async def _main_coroutine(
 
     # Start up the lifespan protocol.
     lifespan_app_to_framework_queue: asyncio.Queue[
-        core.EventOrScope | None
+        EventOrScope | None
     ] = asyncio.Queue()
-    lifespan_framework_to_app_queue: asyncio.Queue[core.EventOrScope] = asyncio.Queue()
+    lifespan_framework_to_app_queue: asyncio.Queue[EventOrScope] = asyncio.Queue()
     lifespan_manager = core.LifespanManager(
         lifespan_framework_to_app_queue.put, lifespan_app_to_framework_queue.get, state
     )
@@ -247,7 +248,7 @@ async def _main_coroutine(
 
 
 def run_tcp(
-    application: core.ApplicationType,
+    application: ApplicationType,
     hosts: list[str] | None,
     port: int,
     container: core.Container,
@@ -272,7 +273,7 @@ def run_tcp(
 
 
 def run_unix(
-    application: core.ApplicationType, path: str, container: core.Container
+    application: ApplicationType, path: str, container: core.Container
 ) -> None:
     """
     Run an application listening for SCGI connections on a UNIX socket.

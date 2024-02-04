@@ -11,7 +11,7 @@ import sioscgi.request
 import sioscgi.response
 
 import aioscgi.core
-from aioscgi.core import EventOrScope, ReceiveFunction, SendFunction
+from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
 
 
 def events_equal(event1: sioscgi.response.Event, event2: object) -> bool:

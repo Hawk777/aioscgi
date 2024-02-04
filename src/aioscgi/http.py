@@ -101,13 +101,12 @@ def _calc_status(status: int) -> str:
 
 
 def _make_scope(
-    container: Container, state: dict[Any, Any], environ: Mapping[str, bytes]
+    container: Container, environ: Mapping[str, bytes]
 ) -> EventOrScope | None:
     """
     Convert a CGI/SCGI environment mapping into an ASGI HTTP scope dictionary.
 
     :param container: The ASGI container.
-    :param state: The application state dictionary.
     :param environ: The CGI/SCGI environment mapping.
     :return: The HTTP scope, or None if the request is malformed, in which case an error
         has been logged and the caller should not run the ASGI application.
@@ -199,7 +198,7 @@ def _make_scope(
         "extensions": {
             "environ": environ,
         },
-        "state": state,
+        "state": container.state,
     }
 
 
@@ -216,7 +215,6 @@ class _Instance:
         "_writer": """The SCGI protocol response state machine.""",
         "_response_headers": """The response headers provided by the application.""",
         "_response_headers_sent": """Whether the response headers have been sent.""",
-        "_state": """The application state dictionary.""",
     }
 
     _container: Container
@@ -228,14 +226,12 @@ class _Instance:
     _writer: sioscgi.response.SCGIWriter
     _response_headers: sioscgi.response.Headers | None
     _response_headers_sent: bool
-    _state: dict[Any, Any]
 
     def __init__(
         self: _Instance,
         container: Container,
         read_cb: Callable[[], Awaitable[bytes]],
         write_cb: Callable[[bytes, bool], Awaitable[None]],
-        state: dict[Any, Any],
     ) -> None:
         """
         Construct a new _Instance.
@@ -243,7 +239,6 @@ class _Instance:
         :param container: The ASGI container.
         :param read_cb: The read-from-client callable.
         :param write_cb: The write-to-client callable.
-        :param state: The state dictionary that the application can use.
         """
         self._container = container
         self._read_cb = read_cb
@@ -254,7 +249,6 @@ class _Instance:
         self._writer = sioscgi.response.SCGIWriter()
         self._response_headers = None
         self._response_headers_sent = False
-        self._state = state
 
     async def run(self: _Instance) -> None:
         """Run the application."""
@@ -276,7 +270,7 @@ class _Instance:
                 environ = event.environment
 
         # Build a scope dictionary.
-        scope: EventOrScope | None = _make_scope(self._container, self._state, environ)
+        scope: EventOrScope | None = _make_scope(self._container, environ)
         if scope is None:
             return
 
@@ -400,10 +394,12 @@ class Container:
     __slots__ = {
         "application": """The application callable.""",
         "base_uri": """The base URI prefix.""",
+        "state": """The application state dictionary.""",
     }
 
     application: ApplicationType
     base_uri: str | None
+    state: dict[Any, Any]
 
     def __init__(
         self: Container, application: ApplicationType, base_uri: str | None
@@ -418,12 +414,12 @@ class Container:
         """
         self.application = application
         self.base_uri = base_uri
+        self.state = {}
 
     def run(
         self: Container,
         read_cb: Callable[[], Awaitable[bytes]],
         write_cb: Callable[[bytes, bool], Awaitable[None]],
-        state: dict[Any, Any],
     ) -> Awaitable[None]:
         """
         Run the application to handle one client connection.
@@ -442,5 +438,5 @@ class Container:
             before returning.
         :param state: The state dictionary that the application can use.
         """
-        i = _Instance(self, read_cb, write_cb, state)
+        i = _Instance(self, read_cb, write_cb)
         return i.run()

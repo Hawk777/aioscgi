@@ -208,10 +208,9 @@ class _Instance:
     """The handler for one accepted connection."""
 
     __slots__ = {
-        "_application": """The application callable.""",
+        "_container": """The ASGI container.""",
         "_read_cb": """The read-from-client callable.""",
         "_write_cb": """The write-to-client callable.""",
-        "_base_uri": """The base URI prefix.""",
         "_disconnected": """Whether the SCGI connection has been closed.""",
         "_request_ended": """Whether the end of the request has been received.""",
         "_reader": """The SCGI protocol request state machine.""",
@@ -221,10 +220,9 @@ class _Instance:
         "_state": """The application state dictionary.""",
     }
 
-    _application: ApplicationType
+    _container: Container
     _read_cb: Callable[[], Awaitable[bytes]]
     _write_cb: Callable[[bytes, bool], Awaitable[None]]
-    _base_uri: str | None
     _disconnected: bool
     _request_ended: bool
     _reader: sioscgi.request.SCGIReader
@@ -235,27 +233,22 @@ class _Instance:
 
     def __init__(
         self: _Instance,
-        application: ApplicationType,
+        container: Container,
         read_cb: Callable[[], Awaitable[bytes]],
         write_cb: Callable[[bytes, bool], Awaitable[None]],
-        base_uri: str | None,
         state: dict[Any, Any],
     ) -> None:
         """
         Construct a new _Instance.
 
-        :param application: The application callable.
+        :param container: The ASGI container.
         :param read_cb: The read-from-client callable.
         :param write_cb: The write-to-client callable.
-        :param base_uri: The request URI prefix to the base of the application for
-            computing root_path and path, or None to use SCRIPT_NAME and PATH_INFO
-            instead.
         :param state: The state dictionary that the application can use.
         """
-        self._application = application
+        self._container = container
         self._read_cb = read_cb
         self._write_cb = write_cb
-        self._base_uri = base_uri
         self._disconnected = False
         self._request_ended = False
         self._reader = sioscgi.request.SCGIReader()
@@ -284,13 +277,15 @@ class _Instance:
                 environ = event.environment
 
         # Build a scope dictionary.
-        scope: EventOrScope | None = _make_scope(self._base_uri, self._state, environ)
+        scope: EventOrScope | None = _make_scope(
+            self._container.base_uri, self._state, environ
+        )
         if scope is None:
             return
 
         # Run the application.
         logging.getLogger(__name__).debug("Starting application with scope %s", scope)
-        await self._application(scope, self._receive, self._send)
+        await self._container.application(scope, self._receive, self._send)
 
     async def _receive(self: _Instance) -> EventOrScope:
         """Receive the next event from the SCGI client to the application."""
@@ -450,5 +445,5 @@ class Container:
             before returning.
         :param state: The state dictionary that the application can use.
         """
-        i = _Instance(self.application, read_cb, write_cb, self.base_uri, state)
+        i = _Instance(self, read_cb, write_cb, state)
         return i.run()

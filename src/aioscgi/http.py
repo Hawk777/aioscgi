@@ -101,13 +101,12 @@ def _calc_status(status: int) -> str:
 
 
 def _make_scope(
-    base_uri: str | None, state: dict[Any, Any], environ: Mapping[str, bytes]
+    container: Container, state: dict[Any, Any], environ: Mapping[str, bytes]
 ) -> EventOrScope | None:
     """
     Convert a CGI/SCGI environment mapping into an ASGI HTTP scope dictionary.
 
-    :param base_uri: The request URI prefix to the base of the application for computing
-        root_path and path, or None to use SCRIPT_NAME and PATH_INFO instead.
+    :param container: The ASGI container.
     :param state: The application state dictionary.
     :param environ: The CGI/SCGI environment mapping.
     :return: The HTTP scope, or None if the request is malformed, in which case an error
@@ -118,7 +117,7 @@ def _make_scope(
     environ = {k.upper(): v for k, v in environ.items()}
 
     # Figure out paths.
-    if base_uri is not None:
+    if container.base_uri is not None:
         # A base path was given explicitly. The request URI must begin with the base
         # path (otherwise the request cannot be handled), and root_path should be
         # the given base path while path should be the entire request URI. This form
@@ -132,14 +131,14 @@ def _make_scope(
                 "REQUEST_URI %s is not valid UTF-8", request_uri
             )
             return None
-        if not path.startswith(base_uri):
+        if not path.startswith(container.base_uri):
             logging.getLogger(__name__).error(
                 'REQUEST_URI "%s" does not start with specified base URI "%s"',
                 path,
-                base_uri,
+                container.base_uri,
             )
             return None
-        root_path = base_uri
+        root_path = container.base_uri
     else:
         # No base path was given. The HTTP server is to be trusted to break down the
         # request into a part designating the application (called SCRIPT_NAME in CGI
@@ -277,9 +276,7 @@ class _Instance:
                 environ = event.environment
 
         # Build a scope dictionary.
-        scope: EventOrScope | None = _make_scope(
-            self._container.base_uri, self._state, environ
-        )
+        scope: EventOrScope | None = _make_scope(self._container, self._state, environ)
         if scope is None:
             return
 

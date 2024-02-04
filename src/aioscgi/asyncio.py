@@ -118,10 +118,9 @@ async def _main_coroutine(
     lifespan_shutting_down = loop.create_future()
     lifespan_shutdown_complete = loop.create_future()
     lifespan_manager = lifespan.Manager(
-        container.application,
+        container,
         loop.create_future(),
         asyncio.Lock(),
-        container.state,
         lifespan_started.set_result,
         lifespan_shutting_down,
         lifespan_shutdown_complete.set_result,

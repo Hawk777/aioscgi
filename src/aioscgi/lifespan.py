@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Any
 
+from .container import Container
 from .types import ApplicationType, EventOrScope, ReceiveFunction, SendFunction
 
 
@@ -125,9 +126,9 @@ class Manager:
     """
 
     __slots__ = {
+        "_container": """The ASGI container.""",
         "_wrapped_application": """The application, wrapped for exception handling.""",
         "_never": """An awaitable that will never complete.""",
-        "_state": """The state dictionary that the application can use.""",
         "_started": """A callable to invoke once the application has started up.""",
         "_started_called": """Whether _started has been called.""",
         "_shutting_down": """
@@ -143,9 +144,9 @@ class Manager:
         "_receive_iter": """An asynchronous iterator over the events to receive.""",
     }
 
+    _container: Container
     _wrapped_application: ApplicationType
     _never: Awaitable[None]
-    _state: dict[Any, Any]
     _started: Callable[[str | None], None]
     _started_called: bool
     _shutting_down: Awaitable[None]
@@ -156,10 +157,9 @@ class Manager:
 
     def __init__(
         self: Manager,
-        application: ApplicationType,
+        container: Container,
         never: Awaitable[None],
         mutex: AbstractAsyncContextManager[Any],
-        state: dict[Any, Any],
         started: Callable[[str | None], None],
         shutting_down: Awaitable[None],
         shutdown_complete: Callable[[str | None], None],
@@ -169,12 +169,11 @@ class Manager:
 
         The callables will be invoked in the task that runs the lifespan protocol.
 
-        :param application: The application callable.
+        :param container: The ASGI container.
         :param never: An awaitable that will never complete.
         :param mutex: A mutex (async context manager that can only be entered by one
             task at a time) that the lifespan manager can use internally and that is not
             used by the caller in any way.
-        :param state: The state dictionary that the application can use.
         :param started: A callable that Manager invokes once the application has started
             up, passing the failure message if startup failed or None if startup
             succeeded.
@@ -184,9 +183,9 @@ class Manager:
             has shut down, passing the failure message if shutdown failed or None if
             shutdown succeeded.
         """
-        self._wrapped_application = _wrapper(application, never)
+        self._container = container
+        self._wrapped_application = _wrapper(container.application, never)
         self._never = never
-        self._state = state
         self._started = started
         self._started_called = False
         self._shutting_down = shutting_down
@@ -207,7 +206,7 @@ class Manager:
                 "version": "3.0",
                 "spec_version": "2.0",
             },
-            "state": self._state,
+            "state": self._container.state,
         }
         return await self._wrapped_application(scope, self._receive, self._send)
 

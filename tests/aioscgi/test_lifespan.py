@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from unittest import TestCase
 
+from aioscgi.container import Container
 from aioscgi.lifespan import Manager
 from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
 
@@ -43,10 +44,9 @@ class TestManager(TestCase):
                 raise NotImplementedError
 
             uut = Manager(
-                app,
+                Container(app, None),
                 loop.create_future(),
                 asyncio.Lock(),
-                {},
                 started,
                 loop.create_future(),
                 shutdown_complete,
@@ -106,10 +106,9 @@ class TestManager(TestCase):
                 raise NotImplementedError
 
             uut = Manager(
-                app,
+                Container(app, None),
                 loop.create_future(),
                 asyncio.Lock(),
-                {},
                 started,
                 loop.create_future(),
                 shutdown_complete,
@@ -171,10 +170,9 @@ class TestManager(TestCase):
 
             shutting_down = loop.create_future()
             uut = Manager(
-                app,
+                Container(app, None),
                 loop.create_future(),
                 asyncio.Lock(),
-                {},
                 started,
                 shutting_down,
                 shutdown_complete,
@@ -245,10 +243,9 @@ class TestManager(TestCase):
 
             shutting_down = loop.create_future()
             uut = Manager(
-                app,
+                Container(app, None),
                 loop.create_future(),
                 asyncio.Lock(),
-                {},
                 started,
                 shutting_down,
                 shutdown_complete,
@@ -313,10 +310,9 @@ class TestManager(TestCase):
 
             shutting_down = loop.create_future()
             uut = Manager(
-                app,
+                Container(app, None),
                 loop.create_future(),
                 asyncio.Lock(),
-                {},
                 started,
                 shutting_down,
                 shutdown_complete,

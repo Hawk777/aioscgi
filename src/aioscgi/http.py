@@ -400,29 +400,3 @@ class Connection:
                 # ASGI spec says send on closed connection must be no-op.
                 logging.getLogger(__name__).debug("SCGI socket broken on write")
                 self._disconnected = True
-
-
-def run(
-    container: Container,
-    read_cb: Callable[[], Awaitable[bytes]],
-    write_cb: Callable[[bytes, bool], Awaitable[None]],
-) -> Awaitable[None]:
-    """
-    Run the application to handle one client connection.
-
-    Any exceptions raised by application are propagated to the caller.
-
-    The caller is expected to close the connection to the SCGI client after this
-    function returns.
-
-    :param read_cb: A coroutine which accepts no parameters and, when called,
-        returns a bytes received from the SCGI client, or an empty bytes if the SCGI
-        client has closed the connection.
-    :param write_cb: A coroutine which accepts a bytes and a bool as a parameter
-        and, when called, sends the bytes to the SCGI client; the bool is a hint
-        indicating whether the coroutine should wait until the bytes have been sent
-        before returning.
-    :param state: The state dictionary that the application can use.
-    """
-    conn = Connection(container, read_cb, write_cb)
-    return conn.run()

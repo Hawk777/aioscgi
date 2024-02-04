@@ -51,11 +51,11 @@ async def _connection_wrapper(
                     await writer.drain()
 
             # Run the application.
-            await http.run(
+            await http.Connection(
                 container,
                 functools.partial(reader.read, io.DEFAULT_BUFFER_SIZE),
                 write_cb,
-            )
+            ).run()
         except Exception:  # pylint: disable=broad-except # noqa: BLE001
             logging.getLogger(__name__).error(
                 "Uncaught exception in application callable", exc_info=True

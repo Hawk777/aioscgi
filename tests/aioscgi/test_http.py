@@ -175,7 +175,9 @@ class TestHTTP(TestCase):
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             container = Container(app, None)
-            coro = http.run(container, _unusable_read_cb, _unusable_write_cb)
+            coro = http.Connection(
+                container, _unusable_read_cb, _unusable_write_cb
+            ).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -274,7 +276,9 @@ class TestHTTP(TestCase):
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             container = Container(app, None)
-            coro = http.run(container, _unusable_read_cb, _unusable_write_cb)
+            coro = http.Connection(
+                container, _unusable_read_cb, _unusable_write_cb
+            ).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -364,7 +368,9 @@ class TestHTTP(TestCase):
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             container = Container(app, None)
-            coro = http.run(container, raw_read_wrapper, _unusable_write_cb)
+            coro = http.Connection(
+                container, raw_read_wrapper, _unusable_write_cb
+            ).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -432,7 +438,9 @@ class TestHTTP(TestCase):
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             container = Container(app, None)
-            coro = http.run(container, raw_read_wrapper, _unusable_write_cb)
+            coro = http.Connection(
+                container, raw_read_wrapper, _unusable_write_cb
+            ).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -517,7 +525,9 @@ class TestHTTP(TestCase):
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             container = Container(app, None)
-            coro = http.run(container, _unusable_read_cb, _unusable_write_cb)
+            coro = http.Connection(
+                container, _unusable_read_cb, _unusable_write_cb
+            ).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(

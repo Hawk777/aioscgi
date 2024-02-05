@@ -24,9 +24,10 @@
 
 "Pylint":
   image:
-    name: "cytopia/pylint:latest"
+    name: "python:3.12.1-slim"
     entrypoint: [""]
   script:
+    - python -m pip install --disable-pip-version-check pylint
     - python -m pip install --disable-pip-version-check -e .
     - pylint src tests
 

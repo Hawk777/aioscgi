@@ -290,7 +290,12 @@ class Connection:
 
         # Run the application.
         logging.getLogger(__name__).debug("Starting application with scope %s", scope)
-        await self._container.application(scope, self._receive, self._send)
+        try:
+            await self._container.application(scope, self._receive, self._send)
+        except Exception:  # pylint: disable=broad-except # noqa: BLE001
+            logging.getLogger(__name__).error(
+                "Uncaught exception in application callable", exc_info=True
+            )
 
     async def _receive(self: Connection) -> EventOrScope:
         """Receive the next event from the SCGI client to the application."""

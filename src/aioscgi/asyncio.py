@@ -56,10 +56,6 @@ async def _connection_wrapper(
                 functools.partial(reader.read, io.DEFAULT_BUFFER_SIZE),
                 write_cb,
             ).run()
-        except Exception:  # pylint: disable=broad-except # noqa: BLE001
-            logging.getLogger(__name__).error(
-                "Uncaught exception in application callable", exc_info=True
-            )
         finally:
             # Close the connection.
             try:

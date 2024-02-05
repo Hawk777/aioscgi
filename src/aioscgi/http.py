@@ -220,8 +220,6 @@ class Connection(abc.ABC):
         "_request_ended": """Whether the end of the request has been received.""",
         "_reader": """The SCGI protocol request state machine.""",
         "_writer": """The SCGI protocol response state machine.""",
-        "_response_headers": """The response headers provided by the application.""",
-        "_response_headers_sent": """Whether the response headers have been sent.""",
     }
 
     _container: Container
@@ -229,8 +227,6 @@ class Connection(abc.ABC):
     _request_ended: bool
     _reader: sioscgi.request.SCGIReader
     _writer: sioscgi.response.SCGIWriter
-    _response_headers: sioscgi.response.Headers | None
-    _response_headers_sent: bool
 
     def __init__(
         self: Self,
@@ -246,8 +242,6 @@ class Connection(abc.ABC):
         self._request_ended = False
         self._reader = sioscgi.request.SCGIReader()
         self._writer = sioscgi.response.SCGIWriter()
-        self._response_headers = None
-        self._response_headers_sent = False
 
     @abc.abstractmethod
     async def read_chunk(self: Self) -> bytes:
@@ -360,17 +354,16 @@ class Connection(abc.ABC):
     async def _send(self: Self, event: EventOrScope) -> None:
         event_type = event["type"]
         if event_type == "http.response.start":
-            assert self._response_headers is None
             status_code = event["status"]
             assert isinstance(status_code, int)
             headers = event["headers"]
             assert isinstance(headers, list)
-            self._response_headers = sioscgi.response.Headers(
+            encoded = sioscgi.response.Headers(
                 _calc_status(status_code),
                 [(k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers],
             )
+            await self._send_event(encoded, drain=False)
         elif event_type == "http.response.body":
-            await self._send_headers()
             body = event.get("body")
             if body:  # is present, not None, and nonzero length
                 assert isinstance(body, bytes)
@@ -391,21 +384,6 @@ class Connection(abc.ABC):
             return await self.read_chunk()
         except ConnectionResetError:
             return b""
-
-    async def _send_headers(self: Self) -> None:
-        """Send the headers to the SCGI client, if not already been sent."""
-        if not self._response_headers_sent:
-            # We must have some headers to send.
-            if self._response_headers is None:
-                msg = "http.response.start never sent"
-                raise ValueError(msg)
-
-            # Send the headers, but don’t drain the connection; allow the I/O layer to
-            # optimize by concatenating the headers and the first body chunk into a
-            # single OS call if it wishes.
-            await self._send_event(self._response_headers, drain=False)
-
-            self._response_headers_sent = True
 
     async def _send_event(
         self: Self, event: sioscgi.response.Event, drain: bool

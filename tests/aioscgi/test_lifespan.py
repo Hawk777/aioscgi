@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Self
 from unittest import TestCase
 
 from aioscgi.container import Container
@@ -13,7 +14,7 @@ from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
 class TestManager(TestCase):
     """Tests the lifespan manager."""
 
-    def test_lifespan_startup_successful(self: TestManager) -> None:
+    def test_lifespan_startup_successful(self: Self) -> None:
         """Test successful application startup using the lifespan protocol."""
 
         async def impl() -> None:
@@ -75,7 +76,7 @@ class TestManager(TestCase):
 
         asyncio.run(impl())
 
-    def test_lifespan_startup_failed(self: TestManager) -> None:
+    def test_lifespan_startup_failed(self: Self) -> None:
         """Test failed application startup using the lifespan protocol."""
 
         async def impl() -> None:
@@ -135,7 +136,7 @@ class TestManager(TestCase):
 
         asyncio.run(impl())
 
-    def test_lifespan_shutdown_successful(self: TestManager) -> None:
+    def test_lifespan_shutdown_successful(self: Self) -> None:
         """Test successful application shutdown using the lifespan protocol."""
 
         async def impl() -> None:
@@ -208,7 +209,7 @@ class TestManager(TestCase):
 
         asyncio.run(impl())
 
-    def test_lifespan_shutdown_failed(self: TestManager) -> None:
+    def test_lifespan_shutdown_failed(self: Self) -> None:
         """Test failed application shutdown using the lifespan protocol."""
 
         async def impl() -> None:
@@ -281,7 +282,7 @@ class TestManager(TestCase):
 
         asyncio.run(impl())
 
-    def test_lifespan_not_supported(self: TestManager) -> None:
+    def test_lifespan_not_supported(self: Self) -> None:
         """Test an application not supporting the lifespan protocol."""
 
         async def impl() -> None:

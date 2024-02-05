@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import wsgiref.headers
 from collections.abc import Coroutine
+from typing import Self
 from unittest import TestCase
 from unittest.mock import MagicMock, call, patch
 
@@ -55,7 +56,7 @@ class EventMatcher:
 
     _expected: sioscgi.response.Event
 
-    def __init__(self: EventMatcher, expected: sioscgi.response.Event) -> None:
+    def __init__(self: Self, expected: sioscgi.response.Event) -> None:
         """
         Construct a new matcher.
 
@@ -63,7 +64,7 @@ class EventMatcher:
         """
         self._expected = expected
 
-    def __eq__(self: EventMatcher, actual: object) -> bool:
+    def __eq__(self: Self, actual: object) -> bool:
         """
         Compare a given object to the match target.
 
@@ -71,11 +72,11 @@ class EventMatcher:
         """
         return events_equal(self._expected, actual)
 
-    def __str__(self: EventMatcher) -> str:
+    def __str__(self: Self) -> str:
         """Return the representation of the expected event."""
         return str(self._expected)
 
-    def __repr__(self: EventMatcher) -> str:
+    def __repr__(self: Self) -> str:
         """Return the representation of the expected event."""
         return repr(self._expected)
 
@@ -107,10 +108,10 @@ async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
 class Connection(http.Connection):
     """A mock Connection in which read_chunk and write_chunk cannot be used."""
 
-    async def read_chunk(self: Connection) -> bytes:  # noqa: D102
+    async def read_chunk(self: Self) -> bytes:  # noqa: D102
         raise NotImplementedError
 
-    async def write_chunk(self: Connection, _data: bytes, _drain: bool) -> None:  # noqa: D102
+    async def write_chunk(self: Self, _data: bytes, _drain: bool) -> None:  # noqa: D102
         raise NotImplementedError
 
 
@@ -120,7 +121,7 @@ class TestHTTP(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_simple(
-        self: TestHTTP, reader_class: MagicMock, writer_class: MagicMock
+        self: Self, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test a simple application."""
 
@@ -209,7 +210,7 @@ class TestHTTP(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_multi_body(
-        self: TestHTTP, reader_class: MagicMock, writer_class: MagicMock
+        self: Self, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test request and response bodies transported in multiple parts."""
 
@@ -319,7 +320,7 @@ class TestHTTP(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_disconnect_after_request(
-        self: TestHTTP, reader_class: MagicMock, writer_class: MagicMock
+        self: Self, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test a long polling client disconnecting before the response body is sent."""
 
@@ -369,7 +370,7 @@ class TestHTTP(TestCase):
         class Conn(Connection):
             """A mock connection that allows reading bytes from the mock source."""
 
-            async def read_chunk(self: Conn) -> bytes:
+            async def read_chunk(self: Self) -> bytes:
                 ret = raw_read()
                 assert isinstance(ret, bytes)
                 return ret
@@ -389,7 +390,7 @@ class TestHTTP(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_disconnect_during_request(
-        self: TestHTTP, reader_class: MagicMock, writer_class: MagicMock
+        self: Self, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test a case where the client disconnects while sending the request."""
 
@@ -440,7 +441,7 @@ class TestHTTP(TestCase):
         class Conn(Connection):
             """A mock connection that allows reading bytes from the mock source."""
 
-            async def read_chunk(self: Conn) -> bytes:
+            async def read_chunk(self: Self) -> bytes:
                 ret = raw_read()
                 assert isinstance(ret, bytes)
                 return ret
@@ -466,7 +467,7 @@ class TestHTTP(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_https(
-        self: TestHTTP, reader_class: MagicMock, writer_class: MagicMock
+        self: Self, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test that an HTTPS request is recognized as such."""
 

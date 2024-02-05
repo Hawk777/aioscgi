@@ -7,7 +7,7 @@ import http
 import logging
 import wsgiref.util
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Self
 
 import sioscgi.request
 import sioscgi.response
@@ -233,7 +233,7 @@ class Connection(abc.ABC):
     _response_headers_sent: bool
 
     def __init__(
-        self: Connection,
+        self: Self,
         container: Container,
     ) -> None:
         """
@@ -250,7 +250,7 @@ class Connection(abc.ABC):
         self._response_headers_sent = False
 
     @abc.abstractmethod
-    async def read_chunk(self: Connection) -> bytes:
+    async def read_chunk(self: Self) -> bytes:
         """
         Read a chunk of bytes from the underlying connection.
 
@@ -260,7 +260,7 @@ class Connection(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def write_chunk(self: Connection, data: bytes, drain: bool) -> None:
+    async def write_chunk(self: Self, data: bytes, drain: bool) -> None:
         """
         Write a chunk of bytes to the underlying connection.
 
@@ -270,7 +270,7 @@ class Connection(abc.ABC):
         """
         raise NotImplementedError
 
-    async def run(self: Connection) -> None:
+    async def run(self: Self) -> None:
         """
         Run the application.
 
@@ -308,7 +308,7 @@ class Connection(abc.ABC):
                 "Uncaught exception in application callable", exc_info=True
             )
 
-    async def _receive(self: Connection) -> EventOrScope:
+    async def _receive(self: Self) -> EventOrScope:
         """Receive the next event from the SCGI client to the application."""
         if self._disconnected:
             # The connection has already disconnected.
@@ -357,7 +357,7 @@ class Connection(abc.ABC):
                 logging.getLogger(__name__).debug("Premature EOF on SCGI socket")
                 return {"type": "http.disconnect"}
 
-    async def _send(self: Connection, event: EventOrScope) -> None:
+    async def _send(self: Self, event: EventOrScope) -> None:
         event_type = event["type"]
         if event_type == "http.response.start":
             assert self._response_headers is None
@@ -381,7 +381,7 @@ class Connection(abc.ABC):
             msg = f"Unknown event type {event_type!r} passed to send"
             raise ValueError(msg)
 
-    async def _read_chunk_wrapper(self: Connection) -> bytes:
+    async def _read_chunk_wrapper(self: Self) -> bytes:
         """
         Read the next chunk from the SCGI client.
 
@@ -392,7 +392,7 @@ class Connection(abc.ABC):
         except ConnectionResetError:
             return b""
 
-    async def _send_headers(self: Connection) -> None:
+    async def _send_headers(self: Self) -> None:
         """Send the headers to the SCGI client, if not already been sent."""
         if not self._response_headers_sent:
             # We must have some headers to send.
@@ -408,7 +408,7 @@ class Connection(abc.ABC):
             self._response_headers_sent = True
 
     async def _send_event(
-        self: Connection, event: sioscgi.response.Event, drain: bool
+        self: Self, event: sioscgi.response.Event, drain: bool
     ) -> None:
         """Send an event to the SCGI client."""
         raw = self._writer.send(event)

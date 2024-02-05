@@ -10,6 +10,7 @@ import logging
 import os
 import signal
 from collections.abc import Awaitable, Callable
+from typing import Self
 
 from . import http, lifespan
 from .container import Container
@@ -31,7 +32,7 @@ class Connection(http.Connection):
     _stream_writer: asyncio.StreamWriter
 
     def __init__(
-        self: Connection,
+        self: Self,
         container: Container,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
@@ -47,10 +48,10 @@ class Connection(http.Connection):
         self._stream_reader = reader
         self._stream_writer = writer
 
-    async def read_chunk(self: Connection) -> bytes:  # noqa: D102
+    async def read_chunk(self: Self) -> bytes:  # noqa: D102
         return await self._stream_reader.read(io.DEFAULT_BUFFER_SIZE)
 
-    async def write_chunk(self: Connection, data: bytes, drain: bool) -> None:  # noqa: D102
+    async def write_chunk(self: Self, data: bytes, drain: bool) -> None:  # noqa: D102
         self._stream_writer.write(data)
         if drain:
             await self._stream_writer.drain()
@@ -73,7 +74,7 @@ class ConnectionHandler:
     _container: Container
     _connection_tasks: set[asyncio.Task[None]]
 
-    def __init__(self: ConnectionHandler, container: Container) -> None:
+    def __init__(self: Self, container: Container) -> None:
         """
         Construct a new ConnectionHandler.
 
@@ -83,7 +84,7 @@ class ConnectionHandler:
         self._connection_tasks = set()
 
     async def handle_connection(
-        self: ConnectionHandler,
+        self: Self,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
@@ -105,7 +106,7 @@ class ConnectionHandler:
         finally:
             self._connection_tasks.remove(task)
 
-    async def wait_finished(self: ConnectionHandler) -> None:
+    async def wait_finished(self: Self) -> None:
         """Wait until all connection tasks have completed."""
         while self._connection_tasks:
             await next(iter(self._connection_tasks))

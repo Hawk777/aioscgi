@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
-from typing import Any
+from typing import Any, Self
 
 from .container import Container
 from .types import ApplicationType, EventOrScope, ReceiveFunction, SendFunction
@@ -156,7 +156,7 @@ class Manager:
     _receive_iter: AsyncIterator[EventOrScope]
 
     def __init__(
-        self: Manager,
+        self: Self,
         container: Container,
         never: Awaitable[None],
         mutex: AbstractAsyncContextManager[Any],
@@ -194,7 +194,7 @@ class Manager:
         self._receive_mutex = mutex
         self._receive_iter = self._receive_gen()
 
-    async def run(self: Manager) -> Any:
+    async def run(self: Self) -> Any:
         """
         Run the lifespan protocol.
 
@@ -210,19 +210,19 @@ class Manager:
         }
         return await self._wrapped_application(scope, self._receive, self._send)
 
-    async def _receive_gen(self: Manager) -> AsyncIterator[EventOrScope]:
+    async def _receive_gen(self: Self) -> AsyncIterator[EventOrScope]:
         """Generate events for the application to receive."""
         yield {"type": "lifespan.startup"}
         await self._shutting_down
         yield {"type": "lifespan.shutdown"}
         await self._never
 
-    async def _receive(self: Manager) -> EventOrScope:
+    async def _receive(self: Self) -> EventOrScope:
         """Receive the next lifespan event."""
         async with self._receive_mutex:
             return await anext(self._receive_iter)
 
-    async def _send(self: Manager, event: EventOrScope) -> None:
+    async def _send(self: Self, event: EventOrScope) -> None:
         event_type = event["type"]
         assert isinstance(event_type, str)
         parts = event_type.split(".")

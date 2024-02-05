@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import wsgiref.headers
 from collections.abc import Coroutine
+from typing import Self
 from unittest import TestCase
 from unittest.mock import MagicMock, call, patch
 
 import sioscgi.request
 import sioscgi.response
 
-import aioscgi.core
-from aioscgi.core import EventOrScope, ReceiveFunction, SendFunction
+from aioscgi import http
+from aioscgi.container import Container
+from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
 
 
 def events_equal(event1: sioscgi.response.Event, event2: object) -> bool:
@@ -54,7 +56,7 @@ class EventMatcher:
 
     _expected: sioscgi.response.Event
 
-    def __init__(self: EventMatcher, expected: sioscgi.response.Event) -> None:
+    def __init__(self: Self, expected: sioscgi.response.Event) -> None:
         """
         Construct a new matcher.
 
@@ -62,7 +64,7 @@ class EventMatcher:
         """
         self._expected = expected
 
-    def __eq__(self: EventMatcher, actual: object) -> bool:
+    def __eq__(self: Self, actual: object) -> bool:
         """
         Compare a given object to the match target.
 
@@ -70,11 +72,11 @@ class EventMatcher:
         """
         return events_equal(self._expected, actual)
 
-    def __str__(self: EventMatcher) -> str:
+    def __str__(self: Self) -> str:
         """Return the representation of the expected event."""
         return str(self._expected)
 
-    def __repr__(self: EventMatcher) -> str:
+    def __repr__(self: Self) -> str:
         """Return the representation of the expected event."""
         return repr(self._expected)
 
@@ -103,13 +105,23 @@ async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
     raise NotImplementedError(msg)
 
 
-class TestCore(TestCase):
+class Connection(http.Connection):
+    """A mock Connection in which read_chunk and write_chunk cannot be used."""
+
+    async def read_chunk(self: Self) -> bytes:  # noqa: D102
+        raise NotImplementedError
+
+    async def write_chunk(self: Self, _data: bytes, _drain: bool) -> None:  # noqa: D102
+        raise NotImplementedError
+
+
+class TestHTTP(TestCase):
     """Tests the core logic."""
 
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_simple(
-        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+        self: Self, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test a simple application."""
 
@@ -173,9 +185,8 @@ class TestCore(TestCase):
         reader.next_event.side_effect = [headers, sioscgi.request.End()]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = aioscgi.core.Container(None).run(
-                app, _unusable_read_cb, _unusable_write_cb, {}
-            )
+            container = Container(app, None)
+            coro = Connection(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -199,7 +210,7 @@ class TestCore(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_multi_body(
-        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+        self: Self, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test request and response bodies transported in multiple parts."""
 
@@ -273,9 +284,8 @@ class TestCore(TestCase):
         ]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = aioscgi.core.Container(None).run(
-                app, _unusable_read_cb, _unusable_write_cb, {}
-            )
+            container = Container(app, None)
+            coro = Connection(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -310,7 +320,7 @@ class TestCore(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_disconnect_after_request(
-        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+        self: Self, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test a long polling client disconnecting before the response body is sent."""
 
@@ -357,16 +367,18 @@ class TestCore(TestCase):
         raw_read = reader.raw_read
         raw_read.return_value = b""
 
-        async def raw_read_wrapper() -> bytes:
-            ret = raw_read()
-            assert isinstance(ret, bytes)
-            return ret
+        class Conn(Connection):
+            """A mock connection that allows reading bytes from the mock source."""
+
+            async def read_chunk(self: Self) -> bytes:
+                ret = raw_read()
+                assert isinstance(ret, bytes)
+                return ret
 
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = aioscgi.core.Container(None).run(
-                app, raw_read_wrapper, _unusable_write_cb, {}
-            )
+            container = Container(app, None)
+            coro = Conn(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -378,7 +390,7 @@ class TestCore(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_disconnect_during_request(
-        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+        self: Self, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test a case where the client disconnects while sending the request."""
 
@@ -426,16 +438,18 @@ class TestCore(TestCase):
         raw_read = reader.raw_read
         raw_read.return_value = b""
 
-        async def raw_read_wrapper() -> bytes:
-            ret = raw_read()
-            assert isinstance(ret, bytes)
-            return ret
+        class Conn(Connection):
+            """A mock connection that allows reading bytes from the mock source."""
+
+            async def read_chunk(self: Self) -> bytes:
+                ret = raw_read()
+                assert isinstance(ret, bytes)
+                return ret
 
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = aioscgi.core.Container(None).run(
-                app, raw_read_wrapper, _unusable_write_cb, {}
-            )
+            container = Container(app, None)
+            coro = Conn(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -453,7 +467,7 @@ class TestCore(TestCase):
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
     def test_https(
-        self: TestCore, reader_class: MagicMock, writer_class: MagicMock
+        self: Self, reader_class: MagicMock, writer_class: MagicMock
     ) -> None:
         """Test that an HTTPS request is recognized as such."""
 
@@ -519,9 +533,8 @@ class TestCore(TestCase):
         reader.next_event.side_effect = [headers, sioscgi.request.End()]
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
-            coro = aioscgi.core.Container(None).run(
-                app, _unusable_read_cb, _unusable_write_cb, {}
-            )
+            container = Container(app, None)
+            coro = Connection(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -540,182 +553,4 @@ class TestCore(TestCase):
                 call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
                 call.send(EventMatcher(sioscgi.response.End())),
             ],
-        )
-
-    def test_lifespan_startup_successful(self: TestCore) -> None:
-        """Test successful application startup using the lifespan protocol."""
-        # Create a mock queue and send and receive async callables that access it.
-        mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [{"type": "lifespan.startup.complete"}]
-
-        async def send(event: EventOrScope) -> None:
-            mock_queue.send(event)
-
-        async def receive() -> EventOrScope | None:
-            ret = mock_queue.receive()
-            assert isinstance(ret, dict)
-            return ret
-
-        # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive, {})
-
-        # At this point, nothing should have been done with the queue.
-        self.assertFalse(mock_queue.mock_calls)
-
-        # Run the lifespan startup process. It should return normally.
-        with self.assertRaises(StopIteration):
-            uut.startup().send(None)
-
-        # The lifespan manager should send the lifespan.startup event, then wait for the
-        # application to send the complete message before returning.
-        self.assertEqual(
-            mock_queue.mock_calls,
-            [call.send({"type": "lifespan.startup"}), call.receive()],
-        )
-
-    def test_lifespan_startup_failed(self: TestCore) -> None:
-        """Test failed application startup using the lifespan protocol."""
-        # Create a mock queue and send and receive async callables that access it.
-        mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [
-            {
-                "type": "lifespan.startup.failed",
-                "message": "Application failure message",
-            }
-        ]
-
-        async def send(event: EventOrScope) -> None:
-            mock_queue.send(event)
-
-        async def receive() -> EventOrScope | None:
-            ret = mock_queue.receive()
-            assert isinstance(ret, dict)
-            return ret
-
-        # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive, {})
-
-        # At this point, nothing should have been done with the queue.
-        self.assertFalse(mock_queue.mock_calls)
-
-        # Run the lifespan startup process. It should raise an exception, passing on the
-        # message from the application.
-        with self.assertRaises(
-            aioscgi.core.ApplicationInitializationError,
-            msg="Application failure message",
-        ):
-            uut.startup().send(None)
-
-        # The lifespan manager should send the lifespan.startup event, then wait for the
-        # application to send the failure message before raising its own exception.
-        self.assertEqual(
-            mock_queue.mock_calls,
-            [call.send({"type": "lifespan.startup"}), call.receive()],
-        )
-
-    def test_lifespan_shutdown_successful(self: TestCore) -> None:
-        """Test successful application shutdown using the lifespan protocol."""
-        # Create a mock queue and send and receive async callables that access it.
-        mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [{"type": "lifespan.shutdown.complete"}]
-
-        async def send(event: EventOrScope) -> None:
-            mock_queue.send(event)
-
-        async def receive() -> EventOrScope | None:
-            ret = mock_queue.receive()
-            assert isinstance(ret, dict)
-            return ret
-
-        # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive, {})
-
-        # At this point, nothing should have been done with the queue.
-        self.assertFalse(mock_queue.mock_calls)
-
-        # Run the lifespan shutdown process. It should return normally.
-        with self.assertRaises(StopIteration):
-            uut.shutdown().send(None)
-
-        # The lifespan manager should send the lifespan.shutdown event, then wait for
-        # the application to send the complete message before returning.
-        self.assertEqual(
-            mock_queue.mock_calls,
-            [call.send({"type": "lifespan.shutdown"}), call.receive()],
-        )
-
-    def test_lifespan_shutdown_failed(self: TestCore) -> None:
-        """Test failed application shutdown using the lifespan protocol."""
-        # Create a mock queue and send and receive async callables that access it.
-        mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [
-            {
-                "type": "lifespan.shutdown.failed",
-                "message": "Application failure message",
-            }
-        ]
-
-        async def send(event: EventOrScope) -> None:
-            mock_queue.send(event)
-
-        async def receive() -> EventOrScope | None:
-            ret = mock_queue.receive()
-            assert isinstance(ret, dict)
-            return ret
-
-        # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive, {})
-
-        # At this point, nothing should have been done with the queue.
-        self.assertFalse(mock_queue.mock_calls)
-
-        # Run the lifespan shutdown process. It should return normally, because
-        # application failures during shutdown don’t really benefit from being reraised
-        # at the call site.
-        with self.assertRaises(StopIteration):
-            uut.shutdown().send(None)
-
-        # The lifespan manager should send the lifespan.startup event, then wait for the
-        # application to send the failure message before raising its own exception.
-        self.assertEqual(
-            mock_queue.mock_calls,
-            [call.send({"type": "lifespan.shutdown"}), call.receive()],
-        )
-
-    def test_lifespan_not_supported(self: TestCore) -> None:
-        """Test an application not supporting the lifespan protocol."""
-        # Create a mock queue and send and receive async callables that access it.
-        mock_queue = MagicMock()
-        mock_queue.receive.side_effect = [None]
-
-        async def send(event: EventOrScope) -> None:
-            mock_queue.send(event)
-
-        async def receive() -> EventOrScope | None:
-            ret = mock_queue.receive()
-            assert ret is None
-            return ret
-
-        # Create the lifespan manager.
-        uut = aioscgi.core.LifespanManager(send, receive, {})
-
-        # At this point, nothing should have been done with the queue.
-        self.assertFalse(mock_queue.mock_calls)
-
-        # Run the lifespan startup process. It should return normally. Lack of support
-        # from the application should not be considered an error.
-        with self.assertRaises(StopIteration):
-            uut.startup().send(None)
-
-        # Run the lifespan shutdown process. It should return normally, without doing
-        # anything, because of the earlier indication of no support.
-        with self.assertRaises(StopIteration):
-            uut.shutdown().send(None)
-
-        # The lifespan manager should send the lifespan.startup event, then receive the
-        # indication of no support (representing the application callback raising an
-        # exception), then not interact with the queue again afterwards.
-        self.assertEqual(
-            mock_queue.mock_calls,
-            [call.send({"type": "lifespan.startup"}), call.receive()],
         )

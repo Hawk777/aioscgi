@@ -1,13 +1,13 @@
 "mypy":
   image:
-    name: "cytopia/mypy:latest"
+    name: "python:3.12.1-slim"
     entrypoint: [""]
   cache:
     paths:
       - .mypy_cache/
     key: "mypy"
   script:
-    - python -m pip install --disable-pip-version-check . types-setuptools
+    - python -m pip install --disable-pip-version-check . mypy types-setuptools
     - mypy --strict src tests
 
 "Ruff":

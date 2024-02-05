@@ -104,6 +104,16 @@ async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
     raise NotImplementedError(msg)
 
 
+class Connection(http.Connection):
+    """A mock Connection in which read_chunk and write_chunk cannot be used."""
+
+    async def read_chunk(self: Connection) -> bytes:  # noqa: D102
+        raise NotImplementedError
+
+    async def write_chunk(self: Connection, _data: bytes, _drain: bool) -> None:  # noqa: D102
+        raise NotImplementedError
+
+
 class TestHTTP(TestCase):
     """Tests the core logic."""
 
@@ -175,9 +185,7 @@ class TestHTTP(TestCase):
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             container = Container(app, None)
-            coro = http.Connection(
-                container, _unusable_read_cb, _unusable_write_cb
-            ).run()
+            coro = Connection(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -276,9 +284,7 @@ class TestHTTP(TestCase):
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             container = Container(app, None)
-            coro = http.Connection(
-                container, _unusable_read_cb, _unusable_write_cb
-            ).run()
+            coro = Connection(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -360,17 +366,18 @@ class TestHTTP(TestCase):
         raw_read = reader.raw_read
         raw_read.return_value = b""
 
-        async def raw_read_wrapper() -> bytes:
-            ret = raw_read()
-            assert isinstance(ret, bytes)
-            return ret
+        class Conn(Connection):
+            """A mock connection that allows reading bytes from the mock source."""
+
+            async def read_chunk(self: Conn) -> bytes:
+                ret = raw_read()
+                assert isinstance(ret, bytes)
+                return ret
 
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             container = Container(app, None)
-            coro = http.Connection(
-                container, raw_read_wrapper, _unusable_write_cb
-            ).run()
+            coro = Conn(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -430,17 +437,18 @@ class TestHTTP(TestCase):
         raw_read = reader.raw_read
         raw_read.return_value = b""
 
-        async def raw_read_wrapper() -> bytes:
-            ret = raw_read()
-            assert isinstance(ret, bytes)
-            return ret
+        class Conn(Connection):
+            """A mock connection that allows reading bytes from the mock source."""
+
+            async def read_chunk(self: Conn) -> bytes:
+                ret = raw_read()
+                assert isinstance(ret, bytes)
+                return ret
 
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             container = Container(app, None)
-            coro = http.Connection(
-                container, raw_read_wrapper, _unusable_write_cb
-            ).run()
+            coro = Conn(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(
@@ -525,9 +533,7 @@ class TestHTTP(TestCase):
         writer.send.return_value = b""
         with self.assertRaises(StopIteration):
             container = Container(app, None)
-            coro = http.Connection(
-                container, _unusable_read_cb, _unusable_write_cb
-            ).run()
+            coro = Connection(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
         self.assertEqual(

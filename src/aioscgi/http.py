@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import abc
 import http
 import logging
 import wsgiref.util
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 import sioscgi.request
@@ -203,19 +204,18 @@ def _make_scope(
     }
 
 
-class Connection:
+class Connection(abc.ABC):
     """
     The handler for one accepted connection.
 
     Each time the I/O adapter accepts a new incoming connection, it must create a new
-    instance of this class (in a common task or in a dedicated per-connection task) and
-    then await the object’s run method (in a dedicated per-connection task).
+    instance of an I/O-adapter-specific subclass of this class (in a common task or in a
+    dedicated per-connection task) and then await the object’s run method (in a
+    dedicated per-connection task).
     """
 
     __slots__ = {
         "_container": """The ASGI container.""",
-        "_read_cb": """The read-from-client callable.""",
-        "_write_cb": """The write-to-client callable.""",
         "_disconnected": """Whether the SCGI connection has been closed.""",
         "_request_ended": """Whether the end of the request has been received.""",
         "_reader": """The SCGI protocol request state machine.""",
@@ -225,8 +225,6 @@ class Connection:
     }
 
     _container: Container
-    _read_cb: Callable[[], Awaitable[bytes]]
-    _write_cb: Callable[[bytes, bool], Awaitable[None]]
     _disconnected: bool
     _request_ended: bool
     _reader: sioscgi.request.SCGIReader
@@ -237,19 +235,13 @@ class Connection:
     def __init__(
         self: Connection,
         container: Container,
-        read_cb: Callable[[], Awaitable[bytes]],
-        write_cb: Callable[[bytes, bool], Awaitable[None]],
     ) -> None:
         """
         Construct a new Connection.
 
         :param container: The ASGI container.
-        :param read_cb: The read-from-client callable.
-        :param write_cb: The write-to-client callable.
         """
         self._container = container
-        self._read_cb = read_cb
-        self._write_cb = write_cb
         self._disconnected = False
         self._request_ended = False
         self._reader = sioscgi.request.SCGIReader()
@@ -257,11 +249,30 @@ class Connection:
         self._response_headers = None
         self._response_headers_sent = False
 
+    @abc.abstractmethod
+    async def read_chunk(self: Connection) -> bytes:
+        """
+        Read a chunk of bytes from the underlying connection.
+
+        :return: The bytes, or a zero-length bytes object if the underlying connection
+            has reached EOF.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def write_chunk(self: Connection, data: bytes, drain: bool) -> None:
+        """
+        Write a chunk of bytes to the underlying connection.
+
+        :param data: The bytes to write.
+        :param drain: True if the function should wait until the data has been accepted
+            by the kernel before returning.
+        """
+        raise NotImplementedError
+
     async def run(self: Connection) -> None:
         """
         Run the application.
-
-        Any exceptions raised by application are propagated to the caller.
 
         The caller is expected to close the connection to the SCGI client after this
         function returns.
@@ -271,7 +282,7 @@ class Connection:
         while environ is None:
             event = self._reader.next_event()
             if event is None:
-                chunk = await self._read_chunk()
+                chunk = await self._read_chunk_wrapper()
                 if chunk:
                     self._reader.receive_data(chunk)
                 else:
@@ -312,7 +323,7 @@ class Connection:
             logging.getLogger(__name__).debug(
                 "receive called after end of request: wait for disconnect"
             )
-            await self._read_chunk()
+            await self._read_chunk_wrapper()
             self._disconnected = True
             return {"type": "http.disconnect"}
         while True:
@@ -338,7 +349,7 @@ class Connection:
                 self._request_ended = True
                 return {"type": "http.request"}
             # No more events available. Read bytes from the SCGI socket.
-            raw = await self._read_chunk()
+            raw = await self._read_chunk_wrapper()
             self._reader.receive_data(raw)
             if not raw:
                 self._request_ended = True
@@ -370,10 +381,14 @@ class Connection:
             msg = f"Unknown event type {event_type!r} passed to send"
             raise ValueError(msg)
 
-    async def _read_chunk(self: Connection) -> bytes:
-        """Read the next chunk from the SCGI client."""
+    async def _read_chunk_wrapper(self: Connection) -> bytes:
+        """
+        Read the next chunk from the SCGI client.
+
+        A ConnectionResetError is translated into an EOF.
+        """
         try:
-            return await self._read_cb()
+            return await self.read_chunk()
         except ConnectionResetError:
             return b""
 
@@ -400,7 +415,7 @@ class Connection:
         # If disconnected, silently discard (ASGI says so).
         if raw and not self._disconnected:
             try:
-                await self._write_cb(raw, drain)
+                await self.write_chunk(raw, drain)
             except (BrokenPipeError, ConnectionResetError):
                 # ASGI spec says send on closed connection must be no-op.
                 logging.getLogger(__name__).debug("SCGI socket broken on write")

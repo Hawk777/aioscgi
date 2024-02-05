@@ -1,5 +1,7 @@
 """An I/O adapter connecting aioscgi to the Python standard library asyncio."""
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import functools
@@ -17,58 +19,96 @@ def _do_nothing() -> None:
     """Do nothing."""
 
 
-async def _connection_wrapper(
-    client_connections: set[asyncio.Task[None]],
-    container: Container,
-    reader: asyncio.StreamReader,
-    writer: asyncio.StreamWriter,
-) -> None:
-    """
-    Run an ASGI application in an asyncio server.
+class Connection(http.Connection):
+    """An HTTP connection over asyncio."""
 
-    This function is suitable for passing to ``start_server`` or ``start_unix_server``,
-    with the ``application`` and ``client_connections`` parameters bound via a
-    ``functools.partial`` or similar.
+    __slots__ = {
+        "_stream_reader": """The stream reader for the connection.""",
+        "_stream_writer": """The stream writer for the connection.""",
+    }
 
-    :param client_connections: A set of Task objects, to which this connection is added
-        on entry to and removed on exit from this function.
-    :param container: The ASGI container to use.
-    :param reader: The stream reader for the connection.
-    :param writer: The stream writer for the connection.
+    _stream_reader: asyncio.StreamReader
+    _stream_writer: asyncio.StreamWriter
+
+    def __init__(
+        self: Connection,
+        container: Container,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        """
+        Construct a new Connection.
+
+        :param container: The ASGI container.
+        :param reader: The read half of the connection.
+        :param writer: The write half of the connection.
+        """
+        super().__init__(container)
+        self._stream_reader = reader
+        self._stream_writer = writer
+
+    async def read_chunk(self: Connection) -> bytes:  # noqa: D102
+        return await self._stream_reader.read(io.DEFAULT_BUFFER_SIZE)
+
+    async def write_chunk(self: Connection, data: bytes, drain: bool) -> None:  # noqa: D102
+        self._stream_writer.write(data)
+        if drain:
+            await self._stream_writer.drain()
+
+
+class ConnectionHandler:
     """
-    # Add this task to the set of open client connections.
-    task = asyncio.current_task()
-    assert task is not None, "_connection_wrapper must be called inside a task"
-    client_connections.add(task)
-    try:
+    A handler for incoming connections.
+
+    This handler handles creating a Connection object for each connection and running
+    it, closing the connection once the application callable is finished, and tracking
+    the set of running connection-handling tasks.
+    """
+
+    __slots__ = {
+        "_container",
+        "_connection_tasks",
+    }
+
+    _container: Container
+    _connection_tasks: set[asyncio.Task[None]]
+
+    def __init__(self: ConnectionHandler, container: Container) -> None:
+        """
+        Construct a new ConnectionHandler.
+
+        :param container: The ASGI container.
+        """
+        self._container = container
+        self._connection_tasks = set()
+
+    async def handle_connection(
+        self: ConnectionHandler,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        """
+        Handle a single connection.
+
+        :param reader: The read half of the connection.
+        :param writer: The write half of the connection.
+        """
+        task = asyncio.current_task()
+        assert task is not None
+        self._connection_tasks.add(task)
         try:
-            # aioscgi.run expects callables to read a chunk and write a chunk, the
-            # latter taking a drain boolean; adapt the writing side to the stream model
-            # (the reader is handled with a functools.partial).
-            async def write_cb(data: bytes, drain: bool) -> None:
-                writer.write(data)
-                if drain:
-                    await writer.drain()
-
-            # Run the application.
-            await http.Connection(
-                container,
-                functools.partial(reader.read, io.DEFAULT_BUFFER_SIZE),
-                write_cb,
-            ).run()
-        finally:
-            # Close the connection.
             try:
-                if writer.can_write_eof():
-                    writer.write_eof()
+                return await Connection(self._container, reader, writer).run()
+            finally:
                 writer.close()
-            except Exception:  # pylint: disable=broad-except # noqa: BLE001
-                # If something went wrong while closing the connection, there’s nothing
-                # interesting to report.
-                pass
-    finally:
-        # Remove this task from the set of open client connections.
-        client_connections.remove(task)
+                await writer.wait_closed()
+        finally:
+            self._connection_tasks.remove(task)
+
+    async def wait_finished(self: ConnectionHandler) -> None:
+        """Wait until all connection tasks have completed."""
+        while self._connection_tasks:
+            await next(iter(self._connection_tasks))
 
 
 async def _main_coroutine(
@@ -133,15 +173,11 @@ async def _main_coroutine(
             return
 
         try:
+            # Create a connection handler.
+            connection_handler = ConnectionHandler(container)
+
             # Start the server and, if provided, run the after listen callback.
-            client_connections: set[asyncio.Task[None]] = set()
-            srv = await start_server_fn(
-                functools.partial(
-                    _connection_wrapper,
-                    client_connections,
-                    container,
-                )
-            )
+            srv = await start_server_fn(connection_handler.handle_connection)
             after_listen_cb()
             logging.getLogger(__name__).info("Server up and running")
 
@@ -168,8 +204,7 @@ async def _main_coroutine(
             # reasonable to call it and to consider it part of waiting for closure of
             # existing connections.
             await srv.wait_closed()
-            while client_connections:
-                await next(iter(client_connections))
+            await connection_handler.wait_finished()
             logging.getLogger(__name__).info("All client connections closed")
         finally:
             # Shut down the application.

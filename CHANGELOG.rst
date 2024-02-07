@@ -1,3 +1,31 @@
+Changes in 2.2.0
+================
+
+Breaking changes
+----------------
+
+In the HTTP protocol, the calculation of ``scope["path"]`` has been fixed. It
+used to be incorrectly calculated as equivalent to CGI’s ``PATH_INFO``. In
+accordance with a recent clarification of the ASGI specification, it is now
+calculated as ``PATH_INFO`` prefixed with ``scope["root_path"]``.
+
+New features
+------------
+
+The HTTP protocol now claims to support specification version 2.3, up from 2.1;
+the changes between those versions do not affect aioscgi.
+
+The optional “lifespan state” feature (the ``scope["state"]`` dictionary) is
+now implemented.
+
+Bug fixes
+---------
+
+The lifespan protocol now claims to support specification version 2.0, up from
+1.0; aioscgi actually always supported version 2.0’s ``startup.failed`` and
+``shutdown.failed`` events, so already implemented 2.0 semantics.
+
+
 Changes in 2.1.0
 ================
 

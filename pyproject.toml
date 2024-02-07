@@ -44,4 +44,4 @@ ignore = [
 ]
 select = ["ALL"]
 src = ["src"]
-target-version = "py310"
+target-version = "py311"

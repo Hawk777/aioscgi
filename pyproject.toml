@@ -4,13 +4,37 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "aioscgi"
+version = "2.1.0"
+dependencies = [
+	"sioscgi >= 5.0, < 6.0",
+]
+requires-python = ">= 3.11"
+scripts.aioscgi = "aioscgi.main:main"
+authors = [
+	{ name = "Christopher Head" },
+]
+description = "An ASGI server that speaks SCGI."
+readme = "README.rst"
+classifiers = [
+	"Development Status :: 5 - Production/Stable",
+	"Intended Audience :: Developers",
+	"License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+	"Operating System :: OS Independent",
+	"Programming Language :: Python :: 3",
+	"Topic :: Internet :: WWW/HTTP :: Dynamic Content :: CGI Tools/Libraries",
+	"Topic :: Software Development :: Libraries :: Python Modules",
+]
+urls.Repository = "https://gitlab.com/Hawk777/aioscgi"
+entry-points."aioscgi.io".asyncio = "aioscgi.asyncio"
+
 [tool.pylint.messages_control]
 enable = [
 	"deprecated-pragma",
 	"useless-suppression",
 	"use-symbolic-message-instead",
 ]
-
 disable = [
 	"line-too-long",
 	"no-else-raise",

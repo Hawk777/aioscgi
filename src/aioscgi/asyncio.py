@@ -7,7 +7,7 @@ import contextlib
 import functools
 import io
 import logging
-import os
+import pathlib
 import signal
 from collections.abc import Awaitable, Callable
 from typing import Self
@@ -262,7 +262,7 @@ def run_tcp(
     )
 
 
-def run_unix(path: str, container: Container) -> None:
+def run_unix(path: pathlib.Path, container: Container) -> None:
     """
     Run an application listening for SCGI connections on a UNIX socket.
 
@@ -278,7 +278,7 @@ def run_unix(path: str, container: Container) -> None:
     asyncio.run(
         _main_coroutine(
             functools.partial(asyncio.start_unix_server, path=path),
-            functools.partial(os.chmod, path, 0o666),
+            functools.partial(path.chmod, 0o666),
             container,
         )
     )

@@ -7,7 +7,6 @@ import contextlib
 import functools
 import io
 import logging
-import os
 import pathlib
 import signal
 from collections.abc import Awaitable, Callable
@@ -279,7 +278,7 @@ def run_unix(path: pathlib.Path, container: Container) -> None:
     asyncio.run(
         _main_coroutine(
             functools.partial(asyncio.start_unix_server, path=path),
-            functools.partial(os.chmod, path, 0o666),
+            functools.partial(path.chmod, 0o666),
             container,
         )
     )

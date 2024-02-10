@@ -48,12 +48,16 @@ def main() -> None:
         parser.add_argument(
             "--unix-socket",
             "-u",
+            action="append",
+            default=[],
             type=pathlib.Path,
             help="the UNIX socket path to listen on",
         )
         parser.add_argument(
             "--tcp",
             "-t",
+            action="append",
+            default=[],
             type=TCPAddress,
             help="the TCP address/port to listen on",
             metavar="IPv4ADDR:PORT | [IPv6ADDR]:PORT | HOSTNAME:PORT",
@@ -62,8 +66,8 @@ def main() -> None:
             "application", help="the dotted.module.name:callable of the application"
         )
         args = parser.parse_args()
-        if sum(i is not None for i in (args.unix_socket, args.tcp)) != 1:
-            parser.error("Exactly one of --unix-socket and --tcp must be supplied.")
+        if not any(i for i in (args.unix_socket, args.tcp)):
+            parser.error("At least one of --unix-socket or --tcp must be supplied.")
 
         # Set up logging.
         if args.logging is not None:
@@ -93,9 +97,6 @@ def main() -> None:
 
         # Run the server.
         container = Container(app_callable, args.base_uri)
-        if args.tcp:
-            adapter.run([args.tcp], [], container)
-        else:
-            adapter.run([], [args.unix_socket], container)
+        adapter.run(args.tcp, args.unix_socket, container)
     finally:
         logging.shutdown()

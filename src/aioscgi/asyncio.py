@@ -113,7 +113,10 @@ class ConnectionHandler:
 
 
 async def _main_coroutine(
-    start_server_fn: Callable[..., Awaitable[asyncio.Server]],
+    start_server_fn: Callable[
+        [Callable[[asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]],
+        Awaitable[asyncio.Server],
+    ],
     after_listen_cb: Callable[[], None],
     container: Container,
 ) -> None:

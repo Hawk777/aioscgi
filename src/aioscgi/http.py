@@ -186,7 +186,7 @@ def _make_scope(
         "type": "http",
         "asgi": {
             "version": "3.0",
-            "spec_version": "2.3",
+            "spec_version": "2.4",
         },
         "http_version": _calc_http_version(environ["SERVER_PROTOCOL"]),
         "method": request_method_str.upper(),
@@ -390,11 +390,10 @@ class Connection(abc.ABC):
     ) -> None:
         """Send an event to the SCGI client."""
         raw = self._writer.send(event)
-        # If disconnected, silently discard (ASGI says so).
-        if raw and not self._disconnected:
+        if raw:
             try:
                 await self.write_chunk(raw, drain)
             except (BrokenPipeError, ConnectionResetError):
-                # ASGI spec says send on closed connection must be no-op.
                 logging.getLogger(__name__).debug("SCGI socket broken on write")
                 self._disconnected = True
+                raise

@@ -14,6 +14,7 @@ from typing import Self
 
 from . import http, lifespan
 from .container import Container
+from .tcp import TCPAddress
 
 
 class Connection(http.Connection):
@@ -234,21 +235,20 @@ async def _main_coroutine(
 
 
 def run_tcp(
-    hosts: list[str] | None,
-    port: int,
+    address: TCPAddress,
     container: Container,
 ) -> None:
     """
     Run an application listening for SCGI connections on a TCP port.
 
-    :param hosts: The list of list of hosts to bind to, or None to bind to all
-        interfaces.
-    :param port: The port number.
+    :param address: The host and port to bind to.
     :param container: The ASGI container to use.
     """
     asyncio.run(
         _main_coroutine(
-            functools.partial(asyncio.start_server, host=hosts, port=port),
+            functools.partial(
+                asyncio.start_server, host=address.host, port=address.port
+            ),
             container,
         )
     )

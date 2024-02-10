@@ -10,6 +10,7 @@ import pathlib
 import sys
 
 from .container import Container
+from .tcp import TCPAddress
 
 
 def main() -> None:
@@ -51,22 +52,18 @@ def main() -> None:
             help="the UNIX socket path to listen on",
         )
         parser.add_argument(
-            "--tcp-port", "-p", type=int, help="the TCP port to listen on"
-        )
-        parser.add_argument(
-            "--tcp-host",
-            action="append",
-            help="the IP address(es) or hostname(s) to listen on (for TCP) (default: "
-            "all interfaces)",
+            "--tcp",
+            "-t",
+            type=TCPAddress,
+            help="the TCP address/port to listen on",
+            metavar="IPv4ADDR:PORT | [IPv6ADDR]:PORT | HOSTNAME:PORT",
         )
         parser.add_argument(
             "application", help="the dotted.module.name:callable of the application"
         )
         args = parser.parse_args()
-        if sum(i is not None for i in (args.unix_socket, args.tcp_port)) != 1:
-            parser.error(
-                "Exactly one of --unix-socket and --tcp-port must be supplied."
-            )
+        if sum(i is not None for i in (args.unix_socket, args.tcp)) != 1:
+            parser.error("Exactly one of --unix-socket and --tcp must be supplied.")
 
         # Set up logging.
         if args.logging is not None:
@@ -96,11 +93,8 @@ def main() -> None:
 
         # Run the server.
         container = Container(app_callable, args.base_uri)
-        if args.tcp_port:
-            hosts = args.tcp_host
-            if not hosts:
-                hosts = None
-            adapter.run_tcp(hosts, args.tcp_port, container)
+        if args.tcp:
+            adapter.run_tcp(args.tcp, container)
         else:
             adapter.run_unix(args.unix_socket, container)
     finally:

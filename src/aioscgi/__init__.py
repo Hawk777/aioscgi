@@ -6,8 +6,8 @@ agnostic to the choice of asynchronous framework in use, plus a set of I/O adapt
 which connect the protocol handlers to a specific I/O framework (such as asyncio).
 
 I/O adapters are setuptools entry points in the aioscgi.io group, allowing
-other packages to add their own. An adapter must expose functions
-run_tcp(app_callable, tcp_hosts, tcp_port) and run_unix(app_callable, path).
+other packages to add their own. An adapter must expose a function named “run”. See the
+asyncio module for its signature.
 
 Please see the individual modules for more details.
 """

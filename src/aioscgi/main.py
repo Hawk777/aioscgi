@@ -94,8 +94,8 @@ def main() -> None:
         # Run the server.
         container = Container(app_callable, args.base_uri)
         if args.tcp:
-            adapter.run_tcp(args.tcp, container)
+            adapter.run([args.tcp], [], container)
         else:
-            adapter.run_unix(args.unix_socket, container)
+            adapter.run([], [args.unix_socket], container)
     finally:
         logging.shutdown()

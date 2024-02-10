@@ -9,7 +9,7 @@ import io
 import logging
 import pathlib
 import signal
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from typing import Self
 
 from . import http, lifespan
@@ -112,7 +112,7 @@ class ConnectionHandler:
 async def _main_coroutine(
     start_server_fn: Callable[
         [Callable[[asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]],
-        Awaitable[asyncio.Server],
+        Awaitable[list[asyncio.Server]],
     ],
     container: Container,
 ) -> None:
@@ -120,8 +120,8 @@ async def _main_coroutine(
     Run the application in an asyncio event loop.
 
     :param application: The application callable.
-    :param start_server_fn: Either asyncio.start_server or asyncio.start_unix_server,
-        with server-type-specific parameters bound via functools.partial.
+    :param start_server_fn: A function which accepts a connection handler and starts and
+        returns one or more servers.
     :param container: The ASGI container to use.
     """
     # Get the event loop.
@@ -176,7 +176,7 @@ async def _main_coroutine(
             connection_handler = ConnectionHandler(container)
 
             # Start the server and, if provided, run the after listen callback.
-            srv = await start_server_fn(connection_handler.handle_connection)
+            servers = await start_server_fn(connection_handler.handle_connection)
             logging.getLogger(__name__).info("Server up and running")
 
             # Wait until requested to terminate.
@@ -185,8 +185,9 @@ async def _main_coroutine(
                 "Caught termination signal %s", signal_name
             )
 
-            # Close the listening socket.
-            srv.close()
+            # Close the listening sockets.
+            for server in servers:
+                server.close()
             logging.getLogger(__name__).info("Server no longer listening")
 
             # Wait until all the client connections finish. Each time a task finishes,
@@ -201,7 +202,8 @@ async def _main_coroutine(
             # all accepted connections have been completed as well. Either way, it’s
             # reasonable to call it and to consider it part of waiting for closure of
             # existing connections.
-            await srv.wait_closed()
+            for server in servers:
+                await server.wait_closed()
             await connection_handler.wait_finished()
             logging.getLogger(__name__).info("All client connections closed")
         finally:
@@ -234,58 +236,68 @@ async def _main_coroutine(
                     )
 
 
-def run_tcp(
-    address: TCPAddress,
-    container: Container,
-) -> None:
-    """
-    Run an application listening for SCGI connections on a TCP port.
-
-    :param address: The host and port to bind to.
-    :param container: The ASGI container to use.
-    """
-    asyncio.run(
-        _main_coroutine(
-            functools.partial(
-                asyncio.start_server, host=address.host, port=address.port
-            ),
-            container,
-        )
-    )
-
-
-async def _start_unix_server_and_chmod(
-    path: pathlib.Path,
+async def _start_servers(
+    tcp_addresses: Iterable[TCPAddress],
+    unix_paths: Iterable[pathlib.Path],
     handle_connection: Callable[
         [asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]
     ],
-) -> asyncio.Server:
+) -> list[asyncio.Server]:
     """
-    Start an asyncio UNIX-domain server and chmod the socket to 666.
+    Start a collection of TCP and UNIX-domain servers.
 
-    :param path: The filename of the socket to listen on.
+    The UNIX-domain paths are chmodded to mode 666.
+
+    :param tcp_addresses: The TCP addresses to listen on.
+    :param unix_paths: The UNIX-domain socket filenames to listen on.
+    :return: The started servers.
     """
-    server = await asyncio.start_unix_server(handle_connection, path=path)
-    path.chmod(0o666)
-    return server
+    with contextlib.ExitStack() as stack:
+        tcp_servers = [
+            stack.enter_context(
+                contextlib.closing(
+                    await asyncio.start_server(
+                        handle_connection, host=i.host, port=i.port
+                    )
+                )
+            )
+            for i in tcp_addresses
+        ]
+        unix_servers = [
+            stack.enter_context(
+                contextlib.closing(
+                    await asyncio.start_unix_server(handle_connection, path=i)
+                )
+            )
+            for i in unix_paths
+        ]
+        for i in unix_paths:
+            i.chmod(0o666)
+        stack.pop_all()
+    return tcp_servers + unix_servers
 
 
-def run_unix(path: pathlib.Path, container: Container) -> None:
+def run(
+    tcp_addresses: Iterable[TCPAddress],
+    unix_paths: Iterable[pathlib.Path],
+    container: Container,
+) -> None:
     """
-    Run an application listening for SCGI connections on a UNIX socket.
+    Run an application listening for SCGI connections on one or more TCP/UNIX sockets.
 
-    The socket always has file mode 666. It is not really possible to create a
+    UNIX sockets always have file mode 666. It is not really possible to create a
     UNIX-domain socket with more restrictive permissions from the outset (other than
     perhaps by using umask, which is not thread-safe), and creating it with a more
     permissive mode and then chmodding it afterward leaves an undesirable race
     condition.
 
-    :param path: The filename of the socket to listen on.
+    :param tcp_addresses: The TCP addresses on which to listen.
+    :param unix_paths: The UNIX-domain socket filenames on which to listen.
     :param container: The ASGI container to use.
     """
     asyncio.run(
         _main_coroutine(
-            functools.partial(_start_unix_server_and_chmod, path),
+            functools.partial(_start_servers, tcp_addresses, unix_paths),
             container,
         )
     )

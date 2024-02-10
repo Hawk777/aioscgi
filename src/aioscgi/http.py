@@ -358,9 +358,16 @@ class Connection(abc.ABC):
             assert isinstance(status_code, int)
             headers = event["headers"]
             assert isinstance(headers, list)
+            string_headers = (
+                (k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers
+            )
+            # The ASGI specification says the application is allowed to send
+            # Transfer-Encoding and the container is required to ignore it.
+            filtered_headers = [
+                (k, v) for k, v in string_headers if k.lower() != "transfer-encoding"
+            ]
             encoded = sioscgi.response.Headers(
-                _calc_status(status_code),
-                [(k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers],
+                _calc_status(status_code), filtered_headers
             )
             await self._send_event(encoded, drain=False)
         elif event_type == "http.response.body":

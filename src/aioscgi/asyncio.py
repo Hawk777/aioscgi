@@ -8,6 +8,7 @@ import functools
 import io
 import logging
 import os
+import pathlib
 import signal
 from collections.abc import Awaitable, Callable
 from typing import Self
@@ -262,7 +263,7 @@ def run_tcp(
     )
 
 
-def run_unix(path: str, container: Container) -> None:
+def run_unix(path: pathlib.Path, container: Container) -> None:
     """
     Run an application listening for SCGI connections on a UNIX socket.
 

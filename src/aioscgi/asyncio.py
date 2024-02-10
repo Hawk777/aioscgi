@@ -16,10 +16,6 @@ from . import http, lifespan
 from .container import Container
 
 
-def _do_nothing() -> None:
-    """Do nothing."""
-
-
 class Connection(http.Connection):
     """An HTTP connection over asyncio."""
 
@@ -117,7 +113,6 @@ async def _main_coroutine(
         [Callable[[asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]],
         Awaitable[asyncio.Server],
     ],
-    after_listen_cb: Callable[[], None],
     container: Container,
 ) -> None:
     """
@@ -126,7 +121,6 @@ async def _main_coroutine(
     :param application: The application callable.
     :param start_server_fn: Either asyncio.start_server or asyncio.start_unix_server,
         with server-type-specific parameters bound via functools.partial.
-    :param after_listen_cb: The function to call after the server is up and running.
     :param container: The ASGI container to use.
     """
     # Get the event loop.
@@ -182,7 +176,6 @@ async def _main_coroutine(
 
             # Start the server and, if provided, run the after listen callback.
             srv = await start_server_fn(connection_handler.handle_connection)
-            after_listen_cb()
             logging.getLogger(__name__).info("Server up and running")
 
             # Wait until requested to terminate.
@@ -256,10 +249,25 @@ def run_tcp(
     asyncio.run(
         _main_coroutine(
             functools.partial(asyncio.start_server, host=hosts, port=port),
-            _do_nothing,
             container,
         )
     )
+
+
+async def _start_unix_server_and_chmod(
+    path: pathlib.Path,
+    handle_connection: Callable[
+        [asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]
+    ],
+) -> asyncio.Server:
+    """
+    Start an asyncio UNIX-domain server and chmod the socket to 666.
+
+    :param path: The filename of the socket to listen on.
+    """
+    server = await asyncio.start_unix_server(handle_connection, path=path)
+    path.chmod(0o666)
+    return server
 
 
 def run_unix(path: pathlib.Path, container: Container) -> None:
@@ -277,8 +285,7 @@ def run_unix(path: pathlib.Path, container: Container) -> None:
     """
     asyncio.run(
         _main_coroutine(
-            functools.partial(asyncio.start_unix_server, path=path),
-            functools.partial(path.chmod, 0o666),
+            functools.partial(_start_unix_server_and_chmod, path),
             container,
         )
     )

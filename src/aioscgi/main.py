@@ -10,6 +10,7 @@ import os
 import pathlib
 import socket
 import sys
+from collections.abc import Iterable
 from typing import Self
 
 from .container import Container
@@ -109,6 +110,38 @@ def make_start_stop_listener(systemd: bool) -> StartStopListener:
     raise ValueError(msg)
 
 
+def find_extra_sockets(systemd: bool) -> Iterable[socket.socket]:
+    """
+    Find the extra already-bound sockets.
+
+    :param systemd: True to try to use systemd socket passing, or False to not.
+    :return: The discovered external sockets.
+    """
+    if not systemd:
+        # systemd integration not requested by the user.
+        return ()
+    listen_pid_str = os.environ.get("LISTEN_PID")
+    listen_fds_str = os.environ.get("LISTEN_FDS")
+    if listen_pid_str is None or listen_fds_str is None:
+        # Socket passing mechanism not used. This is info-level because the service
+        # could be launched under systemd and be using integration for e.g. startup
+        # notification, but not be using socket passing.
+        logging.getLogger(__name__).info("No systemd sockets passed")
+        return ()
+    listen_pid = int(listen_pid_str)
+    listen_fds = int(listen_fds_str)
+    if listen_pid != os.getpid():
+        # Socket passing mechanism in use for some other process whose environment
+        # variable we inherited, but not intended for us.
+        logging.getLogger(__name__).info("No systemd sockets passed")
+        return ()
+    socks = [socket.socket(fileno=i) for i in range(3, 3 + listen_fds)]
+    for sock in socks:
+        os.set_inheritable(sock.fileno(), False)  # noqa: FBT003
+    logging.getLogger(__name__).info("%d systemd socket(s) passed", len(socks))
+    return socks
+
+
 def main() -> None:
     """Run the application."""
     try:
@@ -161,7 +194,7 @@ def main() -> None:
         parser.add_argument(
             "--systemd",
             action="store_true",
-            help="enable systemd integration (startup notification)",
+            help="enable systemd integration (startup notification, socket passing)",
         )
         parser.add_argument(
             "application", help="the dotted.module.name:callable of the application"
@@ -198,7 +231,10 @@ def main() -> None:
 
         # Run the server.
         start_stop_listener = make_start_stop_listener(args.systemd)
+        extra_sockets = find_extra_sockets(args.systemd)
         container = Container(app_callable, args.base_uri)
-        adapter.run(args.tcp, args.unix_socket, [], container, start_stop_listener)
+        adapter.run(
+            args.tcp, args.unix_socket, extra_sockets, container, start_stop_listener
+        )
     finally:
         logging.shutdown()

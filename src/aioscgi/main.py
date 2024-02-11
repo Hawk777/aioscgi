@@ -199,6 +199,6 @@ def main() -> None:
         # Run the server.
         start_stop_listener = make_start_stop_listener(args.systemd)
         container = Container(app_callable, args.base_uri)
-        adapter.run(args.tcp, args.unix_socket, container, start_stop_listener)
+        adapter.run(args.tcp, args.unix_socket, [], container, start_stop_listener)
     finally:
         logging.shutdown()

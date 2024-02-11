@@ -9,6 +9,7 @@ import io
 import logging
 import pathlib
 import signal
+import socket
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from typing import Self
 
@@ -248,6 +249,7 @@ async def _main_coroutine(
 async def _start_servers_gen(
     tcp_addresses: Iterable[TCPAddress],
     unix_paths: Iterable[pathlib.Path],
+    extra_sockets: Iterable[socket.socket],
     handle_connection: Callable[
         [asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]
     ],
@@ -261,10 +263,22 @@ async def _start_servers_gen(
 
     :param tcp_addresses: The TCP addresses to listen on.
     :param unix_paths: The UNIX-domain socket filenames to listen on.
+    :param extra_sockets: The extra already-bound sockets on which to listen.
     :param handle_connection: The connection handler to pass into the created asyncio
         servers.
     :return: The started servers.
     """
+    for extra_socket in extra_sockets:
+        if extra_socket.type != socket.SOCK_STREAM:
+            msg = f"External socket is type {extra_socket.type}, SOCK_STREAM required"
+            raise ValueError(msg)
+        if extra_socket.family in (socket.AF_INET, socket.AF_INET6):
+            yield await asyncio.start_server(handle_connection, sock=extra_socket)
+        elif extra_socket.family == socket.AF_UNIX:
+            yield await asyncio.start_unix_server(handle_connection, sock=extra_socket)
+        else:
+            msg = f"Unrecognized external socket family {extra_socket.family}"
+            raise ValueError(msg)
     for tcp_address in tcp_addresses:
         yield await asyncio.start_server(
             handle_connection, host=tcp_address.host, port=tcp_address.port
@@ -278,6 +292,7 @@ async def _start_servers_gen(
 async def _start_servers(
     tcp_addresses: Iterable[TCPAddress],
     unix_paths: Iterable[pathlib.Path],
+    extra_sockets: Iterable[socket.socket],
     handle_connection: Callable[
         [asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]
     ],
@@ -289,6 +304,7 @@ async def _start_servers(
 
     :param tcp_addresses: The TCP addresses to listen on.
     :param unix_paths: The UNIX-domain socket filenames to listen on.
+    :param extra_sockets: The extra already-bound sockets on which to listen.
     :param handle_connection: The connection handler to pass into the created asyncio
         servers.
     :return: The started servers.
@@ -297,7 +313,7 @@ async def _start_servers(
         servers = [
             stack.enter_context(contextlib.closing(i))
             async for i in _start_servers_gen(
-                tcp_addresses, unix_paths, handle_connection
+                tcp_addresses, unix_paths, extra_sockets, handle_connection
             )
         ]
         stack.pop_all()
@@ -307,6 +323,7 @@ async def _start_servers(
 def run(
     tcp_addresses: Iterable[TCPAddress],
     unix_paths: Iterable[pathlib.Path],
+    extra_sockets: Iterable[socket.socket],
     container: Container,
     listener: StartStopListener,
 ) -> None:
@@ -321,12 +338,13 @@ def run(
 
     :param tcp_addresses: The TCP addresses on which to listen.
     :param unix_paths: The UNIX-domain socket filenames on which to listen.
+    :param extra_sockets: The extra already-bound sockets on which to listen.
     :param container: The ASGI container to use.
     :param listener: The start/stop listener to notify of startup/shutdown.
     """
     asyncio.run(
         _main_coroutine(
-            functools.partial(_start_servers, tcp_addresses, unix_paths),
+            functools.partial(_start_servers, tcp_addresses, unix_paths, extra_sockets),
             container,
             listener,
         )

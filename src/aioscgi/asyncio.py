@@ -9,12 +9,14 @@ import io
 import logging
 import pathlib
 import signal
-from collections.abc import Awaitable, Callable, Iterable
+import socket
+from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from typing import Self
 
 from . import http, lifespan
 from .container import Container
 from .tcp import TCPAddress
+from .types import StartStopListener
 
 
 class Connection(http.Connection):
@@ -115,6 +117,7 @@ async def _main_coroutine(
         Awaitable[list[asyncio.Server]],
     ],
     container: Container,
+    listener: StartStopListener,
 ) -> None:
     """
     Run the application in an asyncio event loop.
@@ -123,6 +126,7 @@ async def _main_coroutine(
     :param start_server_fn: A function which accepts a connection handler and starts and
         returns one or more servers.
     :param container: The ASGI container to use.
+    :param listener: The start/stop listener to notify of startup/shutdown.
     """
     # Get the event loop.
     loop = asyncio.get_event_loop()
@@ -175,15 +179,21 @@ async def _main_coroutine(
             # Create a connection handler.
             connection_handler = ConnectionHandler(container)
 
-            # Start the server and, if provided, run the after listen callback.
+            # Start the server.
             servers = await start_server_fn(connection_handler.handle_connection)
             logging.getLogger(__name__).info("Server up and running")
+
+            # Notify the listener.
+            listener.started()
 
             # Wait until requested to terminate.
             signal_name = await term_sig
             logging.getLogger(__name__).info(
                 "Caught termination signal %s", signal_name
             )
+
+            # Notify the listener.
+            listener.stopping()
 
             # Close the listening sockets.
             for server in servers:
@@ -236,9 +246,53 @@ async def _main_coroutine(
                     )
 
 
+async def _start_servers_gen(
+    tcp_addresses: Iterable[TCPAddress],
+    unix_paths: Iterable[pathlib.Path],
+    extra_sockets: Iterable[socket.socket],
+    handle_connection: Callable[
+        [asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]
+    ],
+) -> AsyncIterable[asyncio.Server]:
+    """
+    Start a collection of TCP and UNIX-domain servers.
+
+    The UNIX-domain paths are chmodded to mode 666.
+
+    The servers are started lazily as the returned iterable is iterated.
+
+    :param tcp_addresses: The TCP addresses to listen on.
+    :param unix_paths: The UNIX-domain socket filenames to listen on.
+    :param extra_sockets: The extra already-bound sockets on which to listen.
+    :param handle_connection: The connection handler to pass into the created asyncio
+        servers.
+    :return: The started servers.
+    """
+    for extra_socket in extra_sockets:
+        if extra_socket.type != socket.SOCK_STREAM:
+            msg = f"External socket is type {extra_socket.type}, SOCK_STREAM required"
+            raise ValueError(msg)
+        if extra_socket.family in (socket.AF_INET, socket.AF_INET6):
+            yield await asyncio.start_server(handle_connection, sock=extra_socket)
+        elif extra_socket.family == socket.AF_UNIX:
+            yield await asyncio.start_unix_server(handle_connection, sock=extra_socket)
+        else:
+            msg = f"Unrecognized external socket family {extra_socket.family}"
+            raise ValueError(msg)
+    for tcp_address in tcp_addresses:
+        yield await asyncio.start_server(
+            handle_connection, host=tcp_address.host, port=tcp_address.port
+        )
+    for unix_path in unix_paths:
+        server = await asyncio.start_unix_server(handle_connection, path=unix_path)
+        unix_path.chmod(0o666)
+        yield server
+
+
 async def _start_servers(
     tcp_addresses: Iterable[TCPAddress],
     unix_paths: Iterable[pathlib.Path],
+    extra_sockets: Iterable[socket.socket],
     handle_connection: Callable[
         [asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]
     ],
@@ -250,37 +304,28 @@ async def _start_servers(
 
     :param tcp_addresses: The TCP addresses to listen on.
     :param unix_paths: The UNIX-domain socket filenames to listen on.
+    :param extra_sockets: The extra already-bound sockets on which to listen.
+    :param handle_connection: The connection handler to pass into the created asyncio
+        servers.
     :return: The started servers.
     """
     with contextlib.ExitStack() as stack:
-        tcp_servers = [
-            stack.enter_context(
-                contextlib.closing(
-                    await asyncio.start_server(
-                        handle_connection, host=i.host, port=i.port
-                    )
-                )
+        servers = [
+            stack.enter_context(contextlib.closing(i))
+            async for i in _start_servers_gen(
+                tcp_addresses, unix_paths, extra_sockets, handle_connection
             )
-            for i in tcp_addresses
         ]
-        unix_servers = [
-            stack.enter_context(
-                contextlib.closing(
-                    await asyncio.start_unix_server(handle_connection, path=i)
-                )
-            )
-            for i in unix_paths
-        ]
-        for i in unix_paths:
-            i.chmod(0o666)
         stack.pop_all()
-    return tcp_servers + unix_servers
+    return servers
 
 
 def run(
     tcp_addresses: Iterable[TCPAddress],
     unix_paths: Iterable[pathlib.Path],
+    extra_sockets: Iterable[socket.socket],
     container: Container,
+    listener: StartStopListener,
 ) -> None:
     """
     Run an application listening for SCGI connections on one or more TCP/UNIX sockets.
@@ -293,11 +338,14 @@ def run(
 
     :param tcp_addresses: The TCP addresses on which to listen.
     :param unix_paths: The UNIX-domain socket filenames on which to listen.
+    :param extra_sockets: The extra already-bound sockets on which to listen.
     :param container: The ASGI container to use.
+    :param listener: The start/stop listener to notify of startup/shutdown.
     """
     asyncio.run(
         _main_coroutine(
-            functools.partial(_start_servers, tcp_addresses, unix_paths),
+            functools.partial(_start_servers, tcp_addresses, unix_paths, extra_sockets),
             container,
+            listener,
         )
     )

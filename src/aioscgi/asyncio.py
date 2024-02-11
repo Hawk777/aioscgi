@@ -175,7 +175,7 @@ async def _main_coroutine(
             # Create a connection handler.
             connection_handler = ConnectionHandler(container)
 
-            # Start the server and, if provided, run the after listen callback.
+            # Start the server.
             servers = await start_server_fn(connection_handler.handle_connection)
             logging.getLogger(__name__).info("Server up and running")
 

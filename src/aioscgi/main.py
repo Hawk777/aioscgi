@@ -8,9 +8,23 @@ import logging
 import logging.config
 import pathlib
 import sys
+from typing import Self
 
 from .container import Container
 from .tcp import TCPAddress
+from .types import StartStopListener
+
+
+class NullaryListener(StartStopListener):
+    """A start/stop listener that does nothing."""
+
+    __slots__ = ()
+
+    def started(self: Self) -> None:
+        """Do nothing."""
+
+    def stopping(self: Self) -> None:
+        """Do nothing."""
 
 
 def main() -> None:
@@ -96,7 +110,8 @@ def main() -> None:
         assert app_callable is not None
 
         # Run the server.
+        start_stop_listener = NullaryListener()
         container = Container(app_callable, args.base_uri)
-        adapter.run(args.tcp, args.unix_socket, container)
+        adapter.run(args.tcp, args.unix_socket, container, start_stop_listener)
     finally:
         logging.shutdown()

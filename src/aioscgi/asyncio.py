@@ -9,7 +9,7 @@ import io
 import logging
 import pathlib
 import signal
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from typing import Self
 
 from . import http, lifespan
@@ -245,6 +245,34 @@ async def _main_coroutine(
                     )
 
 
+async def _start_servers_gen(
+    tcp_addresses: Iterable[TCPAddress],
+    unix_paths: Iterable[pathlib.Path],
+    handle_connection: Callable[
+        [asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]
+    ],
+) -> AsyncIterable[asyncio.Server]:
+    """
+    Start a collection of TCP and UNIX-domain servers.
+
+    The UNIX-domain paths are chmodded to mode 666.
+
+    The servers are started lazily as the returned iterable is iterated.
+
+    :param tcp_addresses: The TCP addresses to listen on.
+    :param unix_paths: The UNIX-domain socket filenames to listen on.
+    :return: The started servers.
+    """
+    for tcp_address in tcp_addresses:
+        yield await asyncio.start_server(
+            handle_connection, host=tcp_address.host, port=tcp_address.port
+        )
+    for unix_path in unix_paths:
+        server = await asyncio.start_unix_server(handle_connection, path=unix_path)
+        unix_path.chmod(0o666)
+        yield server
+
+
 async def _start_servers(
     tcp_addresses: Iterable[TCPAddress],
     unix_paths: Iterable[pathlib.Path],
@@ -262,28 +290,14 @@ async def _start_servers(
     :return: The started servers.
     """
     with contextlib.ExitStack() as stack:
-        tcp_servers = [
-            stack.enter_context(
-                contextlib.closing(
-                    await asyncio.start_server(
-                        handle_connection, host=i.host, port=i.port
-                    )
-                )
+        servers = [
+            stack.enter_context(contextlib.closing(i))
+            async for i in _start_servers_gen(
+                tcp_addresses, unix_paths, handle_connection
             )
-            for i in tcp_addresses
         ]
-        unix_servers = [
-            stack.enter_context(
-                contextlib.closing(
-                    await asyncio.start_unix_server(handle_connection, path=i)
-                )
-            )
-            for i in unix_paths
-        ]
-        for i in unix_paths:
-            i.chmod(0o666)
         stack.pop_all()
-    return tcp_servers + unix_servers
+    return servers
 
 
 def run(

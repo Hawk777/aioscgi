@@ -6,7 +6,9 @@ import importlib.metadata
 import json
 import logging
 import logging.config
+import os
 import pathlib
+import socket
 import sys
 from typing import Self
 
@@ -25,6 +27,86 @@ class NullaryListener(StartStopListener):
 
     def stopping(self: Self) -> None:
         """Do nothing."""
+
+
+class SystemDListener(StartStopListener):
+    """A start/stop listener that notifies systemd."""
+
+    __slots__ = {
+        "_sock": "A UNIX-domain socket used to send notifications.",
+        "_target": "The address to send notifications to.",
+    }
+
+    _sock: socket.socket
+    _target: bytes
+
+    def __init__(self: Self, target: bytes) -> None:
+        """
+        Construct a new SystemDListener.
+
+        :param target: The UNIX-domain address to send to.
+        """
+        self._sock = socket.socket(
+            socket.AF_UNIX, socket.SOCK_DGRAM | socket.SOCK_CLOEXEC
+        )
+        self._target = target
+
+    def started(self: Self) -> None:
+        """Notify systemd that we have started."""
+        self._send(b"READY=1")
+
+    def stopping(self: Self) -> None:
+        """Notify systemd that we are stopping."""
+        self._send(b"STOPPING=1")
+
+    def _send(self: Self, message: bytes) -> None:
+        """
+        Send a notification to systemd.
+
+        :param message: The message to send.
+        """
+        try:
+            self._sock.sendto(message, self._target)
+        except OSError:
+            # Failure to notify should be noted but is not fatal.
+            logging.getLogger(__name__).warning(
+                "systemd notification failed", exc_info=True
+            )
+
+
+def make_start_stop_listener(systemd: bool) -> StartStopListener:
+    """
+    Build the start/stop listener.
+
+    :param systemd: True to try to use systemd notification, or False to not.
+    :return: The start/stop listener to use.
+    """
+    if not systemd:
+        # systemd integration not requested by the user.
+        return NullaryListener()
+    path = os.environb.get(b"NOTIFY_SOCKET")
+    if path is None:
+        # systemd integration requested but notification not available. This is
+        # info-level because it could potentially happen under systemd when the service
+        # type is set to something other than notify, which a user could have done
+        # intentionally (and they might still want --systemd for other purposes).
+        logging.getLogger(__name__).info(
+            "systemd notification unavailable because NOTIFY_SOCKET unset"
+        )
+        return NullaryListener()
+    if path == b"":
+        # Environment variable is set but empty.
+        msg = "NOTIFY_SOCKET is empty"
+        raise ValueError(msg)
+    if path[0] == ord(b"/"):
+        # Notification socket is a filesystem-namespace socket.
+        return SystemDListener(path)
+    if path[0] == ord(b"@"):
+        # Notification socket is an abstract-namespace socket.
+        return SystemDListener(b"\x00" + path[1:])
+    # Notification socket is unknown and unsupported (maybe vsock?).
+    msg = f"Unrecognized NOTIFY_SOCKET value {os.fsdecode(path)}"
+    raise ValueError(msg)
 
 
 def main() -> None:
@@ -77,6 +159,11 @@ def main() -> None:
             metavar="IPv4ADDR:PORT | [IPv6ADDR]:PORT | HOSTNAME:PORT",
         )
         parser.add_argument(
+            "--systemd",
+            action="store_true",
+            help="enable systemd integration (startup notification)",
+        )
+        parser.add_argument(
             "application", help="the dotted.module.name:callable of the application"
         )
         args = parser.parse_args()
@@ -110,7 +197,7 @@ def main() -> None:
         assert app_callable is not None
 
         # Run the server.
-        start_stop_listener = NullaryListener()
+        start_stop_listener = make_start_stop_listener(args.systemd)
         container = Container(app_callable, args.base_uri)
         adapter.run(args.tcp, args.unix_socket, container, start_stop_listener)
     finally:

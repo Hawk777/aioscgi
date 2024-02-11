@@ -261,6 +261,8 @@ async def _start_servers_gen(
 
     :param tcp_addresses: The TCP addresses to listen on.
     :param unix_paths: The UNIX-domain socket filenames to listen on.
+    :param handle_connection: The connection handler to pass into the created asyncio
+        servers.
     :return: The started servers.
     """
     for tcp_address in tcp_addresses:
@@ -287,6 +289,8 @@ async def _start_servers(
 
     :param tcp_addresses: The TCP addresses to listen on.
     :param unix_paths: The UNIX-domain socket filenames to listen on.
+    :param handle_connection: The connection handler to pass into the created asyncio
+        servers.
     :return: The started servers.
     """
     with contextlib.ExitStack() as stack:

@@ -7,6 +7,7 @@ import http
 import logging
 import wsgiref.util
 from collections.abc import Mapping
+from contextlib import AbstractAsyncContextManager
 from typing import Any, Self
 
 import sioscgi.request
@@ -219,14 +220,18 @@ class Connection(abc.ABC):
         "_disconnected": """Whether the SCGI connection has been closed.""",
         "_request_ended": """Whether the end of the request has been received.""",
         "_reader": """The SCGI protocol request state machine.""",
+        "_reader_mutex": """A mutex held by the task calling _receive.""",
         "_writer": """The SCGI protocol response state machine.""",
+        "_writer_mutex": """A mutex held by the task calling _send.""",
     }
 
     _container: Container
     _disconnected: bool
     _request_ended: bool
     _reader: sioscgi.request.SCGIReader
+    _reader_mutex: AbstractAsyncContextManager[None]
     _writer: sioscgi.response.SCGIWriter
+    _writer_mutex: AbstractAsyncContextManager[None]
 
     def __init__(
         self: Self,
@@ -241,7 +246,19 @@ class Connection(abc.ABC):
         self._disconnected = False
         self._request_ended = False
         self._reader = sioscgi.request.SCGIReader()
+        self._reader_mutex = self.create_mutex()
         self._writer = sioscgi.response.SCGIWriter()
+        self._writer_mutex = self.create_mutex()
+
+    @abc.abstractmethod
+    def create_mutex(self: Self) -> AbstractAsyncContextManager[None]:
+        """
+        Create a mutex.
+
+        :return: An object that can be used as an asynchronous context manager, such
+            that only one async task can be within the context at a time.
+        """
+        raise NotImplementedError
 
     @abc.abstractmethod
     async def read_chunk(self: Self) -> bytes:
@@ -304,82 +321,86 @@ class Connection(abc.ABC):
 
     async def _receive(self: Self) -> EventOrScope:
         """Receive the next event from the SCGI client to the application."""
-        if self._disconnected:
-            # The connection has already disconnected.
-            logging.getLogger(__name__).debug("receive called after disconnect")
-            return {"type": "http.disconnect"}
-        if self._request_ended:
-            # Asking for another event after the request body is complete can only mean
-            # one thing: wait for the connection to close and return http.disconnect.
-            # This might be useful as part of a wait-for-any scheme where the
-            # application wants to wait for either some external event or the client to
-            # disconnect, for long polling.
-            logging.getLogger(__name__).debug(
-                "receive called after end of request: wait for disconnect"
-            )
-            await self._read_chunk_wrapper()
-            self._disconnected = True
-            return {"type": "http.disconnect"}
-        while True:
-            # Try to get an event from sioscgi.
-            try:
-                event = self._reader.next_event()
-            except sioscgi.request.Error:
-                self._request_ended = True
-                self._disconnected = True
-                logging.getLogger(__name__).error(
-                    "SCGI remote protocol error", exc_info=True
+        async with self._reader_mutex:
+            if self._disconnected:
+                # The connection has already disconnected.
+                logging.getLogger(__name__).debug("receive called after disconnect")
+                return {"type": "http.disconnect"}
+            if self._request_ended:
+                # Asking for another event after the request body is complete can only
+                # mean one thing: wait for the connection to close and return
+                # http.disconnect. This might be useful as part of a wait-for-any scheme
+                # where the application wants to wait for either some external event or
+                # the client to disconnect, for long polling.
+                logging.getLogger(__name__).debug(
+                    "receive called after end of request: wait for disconnect"
                 )
-                return {"type": "http.disconnect"}
-            if event is not None:
-                # Translate the event into an ASGI event.
-                assert isinstance(event, sioscgi.request.Body | sioscgi.request.End)
-                if isinstance(event, sioscgi.request.Body):
-                    return {
-                        "type": "http.request",
-                        "body": event.data,
-                        "more_body": True,
-                    }
-                self._request_ended = True
-                return {"type": "http.request"}
-            # No more events available. Read bytes from the SCGI socket.
-            raw = await self._read_chunk_wrapper()
-            self._reader.receive_data(raw)
-            if not raw:
-                self._request_ended = True
+                await self._read_chunk_wrapper()
                 self._disconnected = True
-                logging.getLogger(__name__).debug("Premature EOF on SCGI socket")
                 return {"type": "http.disconnect"}
+            while True:
+                # Try to get an event from sioscgi.
+                try:
+                    event = self._reader.next_event()
+                except sioscgi.request.Error:
+                    self._request_ended = True
+                    self._disconnected = True
+                    logging.getLogger(__name__).error(
+                        "SCGI remote protocol error", exc_info=True
+                    )
+                    return {"type": "http.disconnect"}
+                if event is not None:
+                    # Translate the event into an ASGI event.
+                    assert isinstance(event, sioscgi.request.Body | sioscgi.request.End)
+                    if isinstance(event, sioscgi.request.Body):
+                        return {
+                            "type": "http.request",
+                            "body": event.data,
+                            "more_body": True,
+                        }
+                    self._request_ended = True
+                    return {"type": "http.request"}
+                # No more events available. Read bytes from the SCGI socket.
+                raw = await self._read_chunk_wrapper()
+                self._reader.receive_data(raw)
+                if not raw:
+                    self._request_ended = True
+                    self._disconnected = True
+                    logging.getLogger(__name__).debug("Premature EOF on SCGI socket")
+                    return {"type": "http.disconnect"}
 
     async def _send(self: Self, event: EventOrScope) -> None:
-        event_type = event["type"]
-        if event_type == "http.response.start":
-            status_code = event["status"]
-            assert isinstance(status_code, int)
-            headers = event["headers"]
-            assert isinstance(headers, list)
-            string_headers = (
-                (k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers
-            )
-            # The ASGI specification says the application is allowed to send
-            # Transfer-Encoding and the container is required to ignore it.
-            filtered_headers = [
-                (k, v) for k, v in string_headers if k.lower() != "transfer-encoding"
-            ]
-            encoded = sioscgi.response.Headers(
-                _calc_status(status_code), filtered_headers
-            )
-            await self._send_event(encoded, drain=False)
-        elif event_type == "http.response.body":
-            body = event.get("body")
-            if body:  # is present, not None, and nonzero length
-                assert isinstance(body, bytes)
-                await self._send_event(sioscgi.response.Body(body), drain=True)
-            if not event.get("more_body", False):
-                await self._send_event(sioscgi.response.End(), drain=True)
-        else:
-            msg = f"Unknown event type {event_type!r} passed to send"
-            raise ValueError(msg)
+        async with self._writer_mutex:
+            event_type = event["type"]
+            if event_type == "http.response.start":
+                status_code = event["status"]
+                assert isinstance(status_code, int)
+                headers = event["headers"]
+                assert isinstance(headers, list)
+                string_headers = (
+                    (k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers
+                )
+                # The ASGI specification says the application is allowed to send
+                # Transfer-Encoding and the container is required to ignore it.
+                filtered_headers = [
+                    (k, v)
+                    for k, v in string_headers
+                    if k.lower() != "transfer-encoding"
+                ]
+                encoded = sioscgi.response.Headers(
+                    _calc_status(status_code), filtered_headers
+                )
+                await self._send_event(encoded, drain=False)
+            elif event_type == "http.response.body":
+                body = event.get("body")
+                if body:  # is present, not None, and nonzero length
+                    assert isinstance(body, bytes)
+                    await self._send_event(sioscgi.response.Body(body), drain=True)
+                if not event.get("more_body", False):
+                    await self._send_event(sioscgi.response.End(), drain=True)
+            else:
+                msg = f"Unknown event type {event_type!r} passed to send"
+                raise ValueError(msg)
 
     async def _read_chunk_wrapper(self: Self) -> bytes:
         """

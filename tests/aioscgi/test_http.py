@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import wsgiref.headers
 from collections.abc import Coroutine
+from contextlib import AbstractAsyncContextManager
 from typing import Self
 from unittest import TestCase
 from unittest.mock import MagicMock, call, patch
@@ -107,6 +109,9 @@ async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
 
 class Connection(http.Connection):
     """A mock Connection in which read_chunk and write_chunk cannot be used."""
+
+    def create_mutex(self: Self) -> AbstractAsyncContextManager[None]:  # noqa: D102
+        return asyncio.Lock()
 
     async def read_chunk(self: Self) -> bytes:  # noqa: D102
         raise NotImplementedError

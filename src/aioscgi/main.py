@@ -200,7 +200,7 @@ def main() -> None:
             "application", help="the dotted.module.name:callable of the application"
         )
         args = parser.parse_args()
-        if not any(i for i in (args.unix_socket, args.tcp)):
+        if not any((args.unix_socket, args.tcp)):
             parser.error("At least one of --unix-socket or --tcp must be supplied.")
 
         # Set up logging.

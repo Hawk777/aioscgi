@@ -200,8 +200,10 @@ def main() -> None:
             "application", help="the dotted.module.name:callable of the application"
         )
         args = parser.parse_args()
-        if not any((args.unix_socket, args.tcp)):
-            parser.error("At least one of --unix-socket or --tcp must be supplied.")
+        if not any((args.unix_socket, args.tcp, args.systemd)):
+            parser.error(
+                "At least one of --unix-socket, --tcp, or --systemd must be supplied."
+            )
 
         # Set up logging.
         if args.logging is not None:
@@ -210,6 +212,16 @@ def main() -> None:
             logging.config.dictConfig(cfg)
         else:
             logging.basicConfig(level=logging.INFO)
+
+        # Find any externally provided sockets.
+        extra_sockets = find_extra_sockets(args.systemd)
+
+        # Make sure we have any listeners at all.
+        if not any((args.unix_socket, args.tcp, extra_sockets)):
+            parser.error(
+                "With only --systemd and not --unix-socket or --tcp, at least one "
+                "socket must be passed by systemd."
+            )
 
         # Load the I/O adapter.
         adapter = io_adapters[args.adapter].load()
@@ -231,7 +243,6 @@ def main() -> None:
 
         # Run the server.
         start_stop_listener = make_start_stop_listener(args.systemd)
-        extra_sockets = find_extra_sockets(args.systemd)
         container = Container(app_callable, args.base_uri)
         adapter.run(
             args.tcp, args.unix_socket, extra_sockets, container, start_stop_listener

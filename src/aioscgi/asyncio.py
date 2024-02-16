@@ -11,6 +11,7 @@ import pathlib
 import signal
 import socket
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
+from contextlib import AbstractAsyncContextManager
 from typing import Self
 
 from . import http, lifespan
@@ -46,6 +47,9 @@ class Connection(http.Connection):
         super().__init__(container)
         self._stream_reader = reader
         self._stream_writer = writer
+
+    def create_mutex(self: Self) -> AbstractAsyncContextManager[None]:  # noqa: D102
+        return asyncio.Lock()
 
     async def read_chunk(self: Self) -> bytes:  # noqa: D102
         return await self._stream_reader.read(io.DEFAULT_BUFFER_SIZE)

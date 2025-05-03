@@ -125,7 +125,7 @@ class Manager:
     10. The adapter waits until the task which called the run method completes.
     """
 
-    __slots__ = {
+    __slots__ = {  # noqa: RUF023 the attributes are ordered by function, not name
         "_container": """The ASGI container.""",
         "_wrapped_application": """The application, wrapped for exception handling.""",
         "_never": """An awaitable that will never complete.""",

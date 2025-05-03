@@ -13,8 +13,7 @@
 
 "Ruff":
   image:
-    name: "pipelinecomponents/ruff:0.10.0"
-    entrypoint: [""]
+    name: ghcr.io/astral-sh/ruff:0.11.8-alpine
   script:
     - ruff version
     - ruff format --check --diff

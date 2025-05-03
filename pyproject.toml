@@ -51,6 +51,10 @@ disable = [
 ]
 
 [tool.ruff]
+src = ["src"]
+target-version = "py311"
+
+[tool.ruff.lint]
 allowed-confusables = ["’"]
 ignore = [
 	"ANN401", # any-type
@@ -64,9 +68,7 @@ ignore = [
 	"PT", # pytest-related stuff
 	"S101", # assert
 	"S110", # try-except-pass
-	"TCH001", # typing-only-first-party-import
-	"TCH003", # typing-only-standard-library-import
+	"TC001", # typing-only-first-party-import
+	"TC003", # typing-only-standard-library-import
 ]
 select = ["ALL"]
-src = ["src"]
-target-version = "py311"

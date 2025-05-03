@@ -8,6 +8,7 @@
     key: "mypy"
   script:
     - python -m pip install --disable-pip-version-check . mypy types-setuptools
+    - mypy --version
     - mypy --strict src tests
 
 "Ruff":
@@ -15,6 +16,7 @@
     name: "pipelinecomponents/ruff:0.10.0"
     entrypoint: [""]
   script:
+    - ruff version
     - ruff format --check --diff
     - ruff check --output-format=gitlab > ruff-gitlab.json
   artifacts:
@@ -29,6 +31,7 @@
   script:
     - python -m pip install --disable-pip-version-check pylint
     - python -m pip install --disable-pip-version-check -e .
+    - pylint --version
     - pylint src tests
 
 "Unit tests":

@@ -52,7 +52,7 @@ disable = [
 
 [tool.ruff]
 src = ["src"]
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint]
 allowed-confusables = ["’"]

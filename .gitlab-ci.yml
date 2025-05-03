@@ -1,6 +1,6 @@
 "mypy":
   image:
-    name: "python:3.12.1-slim"
+    name: "python:3.13.3-slim"
     entrypoint: [""]
   cache:
     paths:
@@ -25,7 +25,7 @@
 
 "Pylint":
   image:
-    name: "python:3.12.1-slim"
+    name: "python:3.13.3-slim"
     entrypoint: [""]
   script:
     - python -m pip install --disable-pip-version-check pylint

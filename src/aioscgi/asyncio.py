@@ -244,7 +244,7 @@ async def _main_coroutine(
                 except asyncio.CancelledError:
                     # Nothing to see here. Move along.
                     pass
-                except Exception:  # pylint: disable=broad-except # noqa: BLE001
+                except Exception:  # pylint: disable=broad-except
                     logging.getLogger(__name__).exception(
                         "Uncaught exception while cancelling task",
                     )

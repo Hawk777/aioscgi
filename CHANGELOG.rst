@@ -1,3 +1,8 @@
+Changes in 2.3.1
+================
+
+Very minor code cleanup was performed. Compatibility with Python 3.13 was added.
+
 Changes in 2.3.0
 ================
 

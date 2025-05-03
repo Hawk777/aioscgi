@@ -245,8 +245,8 @@ async def _main_coroutine(
                     # Nothing to see here. Move along.
                     pass
                 except Exception:  # pylint: disable=broad-except # noqa: BLE001
-                    logging.getLogger(__name__).error(
-                        "Uncaught exception while cancelling task", exc_info=True
+                    logging.getLogger(__name__).exception(
+                        "Uncaught exception while cancelling task",
                     )
 
 

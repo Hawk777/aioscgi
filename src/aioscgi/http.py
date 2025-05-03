@@ -83,7 +83,10 @@ def _calc_client(environ: dict[str, bytes]) -> list[Any] | None:
         try:
             return [addr.decode("UTF-8"), int(port)]
         except UnicodeDecodeError:
-            logging.getLogger(__name__).error("REMOTE_ADDR %s is not valid UTF-8", addr)
+            logging.getLogger(__name__).exception(
+                "REMOTE_ADDR %s is not valid UTF-8",
+                addr,
+            )
             return None
     else:
         return None
@@ -129,8 +132,9 @@ def _make_scope(
         try:
             path = request_uri.decode("UTF-8")
         except UnicodeDecodeError:
-            logging.getLogger(__name__).error(
-                "REQUEST_URI %s is not valid UTF-8", request_uri
+            logging.getLogger(__name__).exception(
+                "REQUEST_URI %s is not valid UTF-8",
+                request_uri,
             )
             return None
         if not path.startswith(container.base_uri):
@@ -151,16 +155,18 @@ def _make_scope(
         try:
             root_path = script_name.decode("UTF-8")
         except UnicodeDecodeError:
-            logging.getLogger(__name__).error(
-                "SCRIPT_NAME %s is not valid UTF-8", script_name
+            logging.getLogger(__name__).exception(
+                "SCRIPT_NAME %s is not valid UTF-8",
+                script_name,
             )
             return None
         path_info = environ.get("PATH_INFO", b"")
         try:
             path = root_path + path_info.decode("UTF-8")
         except UnicodeDecodeError:
-            logging.getLogger(__name__).error(
-                "PATH_INFO %s is not valid UTF-8", path_info
+            logging.getLogger(__name__).exception(
+                "PATH_INFO %s is not valid UTF-8",
+                path_info,
             )
             return None
 
@@ -169,16 +175,18 @@ def _make_scope(
     try:
         request_method_str = request_method.decode("UTF-8")
     except UnicodeDecodeError:
-        logging.getLogger(__name__).error(
-            "REQUEST_METHOD %s is invalid UTF-8", request_method
+        logging.getLogger(__name__).exception(
+            "REQUEST_METHOD %s is invalid UTF-8",
+            request_method,
         )
         return None
     server_name = environ["SERVER_NAME"]
     try:
         server_name_str = server_name.decode("UTF-8")
     except UnicodeDecodeError:
-        logging.getLogger(__name__).error(
-            "SERVER_NAME %s is invalid UTF-8", server_name
+        logging.getLogger(__name__).exception(
+            "SERVER_NAME %s is invalid UTF-8",
+            server_name,
         )
         return None
 
@@ -315,8 +323,8 @@ class Connection(abc.ABC):
         try:
             await self._container.application(scope, self._receive, self._send)
         except Exception:  # pylint: disable=broad-except # noqa: BLE001
-            logging.getLogger(__name__).error(
-                "Uncaught exception in application callable", exc_info=True
+            logging.getLogger(__name__).exception(
+                "Uncaught exception in application callable",
             )
 
     async def _receive(self: Self) -> EventOrScope:
@@ -345,9 +353,7 @@ class Connection(abc.ABC):
                 except sioscgi.request.Error:
                     self._request_ended = True
                     self._disconnected = True
-                    logging.getLogger(__name__).error(
-                        "SCGI remote protocol error", exc_info=True
-                    )
+                    logging.getLogger(__name__).exception("SCGI remote protocol error")
                     return {"type": "http.disconnect"}
                 if event is not None:
                     # Translate the event into an ASGI event.

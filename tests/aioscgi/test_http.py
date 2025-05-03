@@ -18,37 +18,6 @@ from aioscgi.container import Container
 from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
 
 
-def events_equal(event1: sioscgi.response.Event, event2: object) -> bool:
-    """
-    Check whether two sioscgi response events are deeply equal.
-
-    :param event1: the first value
-    :param event2: the second value
-    :returns: True if event1 and event2 are deeply equal, examining their contents
-    """
-    if type(event1) is not type(event2):
-        return False
-    if not isinstance(
-        event1,
-        sioscgi.response.Headers | sioscgi.response.Body | sioscgi.response.End,
-    ):
-        return NotImplemented
-    slots = event1.__slots__
-    if isinstance(slots, str):
-        slots = (slots,)
-    for k in slots:
-        event1_value = getattr(event1, k)
-        event2_value = getattr(event2, k)
-        if type(event1_value) is not type(event2_value):
-            return False
-        if isinstance(event1_value, wsgiref.headers.Headers):
-            if event1_value.items() != event2_value.items():
-                return False
-        elif event1_value != event2_value:
-            return False
-    return True
-
-
 class EventMatcher:
     """A matcher that compares sioscgi event objects by their contents."""
 
@@ -72,7 +41,27 @@ class EventMatcher:
 
         :param actual: the actual value
         """
-        return events_equal(self._expected, actual)
+        if type(self._expected) is not type(actual):
+            return False
+        if not isinstance(
+            self._expected,
+            sioscgi.response.Headers | sioscgi.response.Body | sioscgi.response.End,
+        ):
+            return NotImplemented
+        slots = self._expected.__slots__
+        if isinstance(slots, str):
+            slots = (slots,)
+        for k in slots:
+            expected_value = getattr(self._expected, k)
+            actual_value = getattr(actual, k)
+            if type(expected_value) is not type(actual_value):
+                return False
+            if isinstance(expected_value, wsgiref.headers.Headers):
+                if expected_value.items() != actual_value.items():
+                    return False
+            elif expected_value != actual_value:
+                return False
+        return True
 
     def __str__(self: Self) -> str:
         """Return the representation of the expected event."""

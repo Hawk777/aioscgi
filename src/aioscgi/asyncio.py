@@ -70,12 +70,12 @@ class ConnectionHandler:
     """
 
     __slots__ = {
-        "_container",
         "_connection_tasks",
+        "_container",
     }
 
-    _container: Container
     _connection_tasks: set[asyncio.Task[None]]
+    _container: Container
 
     def __init__(self: Self, container: Container) -> None:
         """
@@ -83,8 +83,8 @@ class ConnectionHandler:
 
         :param container: The ASGI container.
         """
-        self._container = container
         self._connection_tasks = set()
+        self._container = container
 
     async def handle_connection(
         self: Self,

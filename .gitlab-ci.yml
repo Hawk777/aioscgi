@@ -11,6 +11,7 @@ default:
         - uv.lock
     paths:
       - $UV_CACHE_DIR
+  interruptible: true
 
 Package:
   stage: build

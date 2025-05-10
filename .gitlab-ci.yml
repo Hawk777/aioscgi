@@ -1,40 +1,39 @@
-mypy:
-  image:
-    name: python:3.13.3-slim
-    entrypoint: [""]
-  cache:
+variables:
+  UV_CACHE_DIR: .uv-cache
+  UV_LINK_MODE: copy
+
+default:
+  image: ghcr.io/astral-sh/uv:0.7-python3.13-bookworm-slim
+  cache: &uv_cache
+    key:
+      prefix: uv
+      files:
+        - uv.lock
     paths:
-      - .mypy_cache/
-    key: "mypy"
+      - $UV_CACHE_DIR
+
+mypy:
+  cache:
+    - <<: *uv_cache
+    - key: mypy
+      paths:
+        - .mypy_cache/
   script:
-    - python -m pip install --disable-pip-version-check . mypy types-setuptools
-    - mypy --version
-    - mypy --strict src tests
+    - uv run mypy --strict src tests
 
 Ruff:
-  image:
-    name: ghcr.io/astral-sh/ruff:0.11.8-alpine
   script:
-    - ruff version
-    - ruff format --check --diff
-    - ruff check --output-format=gitlab > ruff-gitlab.json
+    - uv run ruff format --check --diff
+    - uv run ruff check --output-format=gitlab > ruff-gitlab.json
   artifacts:
     reports:
       codequality:
         - ruff-gitlab.json
 
 Pylint:
-  image:
-    name: python:3.13.3-slim
-    entrypoint: [""]
   script:
-    - python -m pip install --disable-pip-version-check pylint
-    - python -m pip install --disable-pip-version-check -e .
-    - pylint --version
-    - pylint src tests
+    - uv run pylint src tests
 
 Unit tests:
-  image: python:3-alpine
   script:
-    - pip install --disable-pip-version-check -e .
-    - python -m unittest
+    - uv run python -m unittest

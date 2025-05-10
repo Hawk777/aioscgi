@@ -1,5 +1,6 @@
 /build/
 /dist/
 /src/aioscgi.egg-info/
+/.venv
 __pycache__/
 .mypy_cache/

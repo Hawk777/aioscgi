@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 ci = [
+	"mypy-gitlab-code-quality",
 	"pylint-gitlab",
 ]
 dev = [

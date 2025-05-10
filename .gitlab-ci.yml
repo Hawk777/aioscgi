@@ -11,6 +11,8 @@ default:
         - uv.lock
     paths:
       - $UV_CACHE_DIR
+  after_script:
+    - uv cache prune
   interruptible: true
 
 Package:

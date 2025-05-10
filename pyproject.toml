@@ -5,6 +5,9 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [dependency-groups]
+ci = [
+	"pylint-gitlab",
+]
 dev = [
 	"mypy ~= 1.15.0",
 	"pylint ~= 3.3.7",

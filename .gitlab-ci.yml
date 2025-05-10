@@ -32,7 +32,11 @@ Ruff:
 
 Pylint:
   script:
-    - uv run pylint src tests
+    - uv run --group ci pylint --output=pylint-gitlab.json --load-plugins=pylint_gitlab --output-format=gitlab-codeclimate src tests
+  artifacts:
+    reports:
+      codequality:
+        - pylint-gitlab.json
 
 Unit tests:
   script:

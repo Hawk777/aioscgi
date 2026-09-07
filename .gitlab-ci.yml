@@ -3,7 +3,7 @@ variables:
   UV_LINK_MODE: copy
 
 default:
-  image: ghcr.io/astral-sh/uv:0.12-python3.13-bookworm-slim
+  image: ghcr.io/astral-sh/uv:0.12-python3.14-trixie-slim
   cache: &uv_cache
     key:
       prefix: uv

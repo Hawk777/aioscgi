@@ -7,7 +7,6 @@ import wsgiref.headers
 from collections.abc import Coroutine
 from contextlib import AbstractAsyncContextManager
 from typing import Self
-from unittest import TestCase
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -114,418 +113,413 @@ class Connection(http.Connection):
         raise NotImplementedError
 
 
-class TestHTTP(TestCase):
-    """Tests the core logic."""
+@patch("sioscgi.response.SCGIWriter")
+@patch("sioscgi.request.SCGIReader")
+def test_simple(reader_class: MagicMock, writer_class: MagicMock) -> None:
+    """Test a simple application."""
 
-    @patch("sioscgi.response.SCGIWriter")
-    @patch("sioscgi.request.SCGIReader")
-    def test_simple(
-        self: Self, reader_class: MagicMock, writer_class: MagicMock
+    async def app(
+        scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
     ) -> None:
-        """Test a simple application."""
+        if scope["type"] == "lifespan":
+            msg = "Lifespan protocol not supported by this application"
+            raise ValueError(msg)
 
-        async def app(
-            scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
-        ) -> None:
-            if scope["type"] == "lifespan":
-                msg = "Lifespan protocol not supported by this application"
-                raise ValueError(msg)
+        assert scope["type"] == "http"
+        assert isinstance(scope["asgi"], dict)
+        assert scope["asgi"]["version"] == "3.0"
+        assert scope["asgi"]["spec_version"] == "2.4"
+        assert scope["http_version"] == "1.1"
+        assert scope["method"] == "GET"
+        assert scope["scheme"] == "http"
+        assert scope["path"] == ""
+        assert scope["query_string"] == b""
+        assert scope["headers"] == []
+        assert scope["server"] == ["localhost", 80]
+        assert isinstance(scope["extensions"], dict)
+        assert scope["extensions"]["environ"] == {
+            "SERVER_PROTOCOL": b"HTTP/1.1",
+            "REQUEST_METHOD": b"GET",
+            "QUERY_STRING": b"",
+            "SCRIPT_NAME": b"",
+            "SERVER_NAME": b"localhost",
+            "SERVER_PORT": b"80",
+        }
 
-            assert scope["type"] == "http"
-            assert isinstance(scope["asgi"], dict)
-            assert scope["asgi"]["version"] == "3.0"
-            assert scope["asgi"]["spec_version"] == "2.4"
-            assert scope["http_version"] == "1.1"
-            assert scope["method"] == "GET"
-            assert scope["scheme"] == "http"
-            assert scope["path"] == ""
-            assert scope["query_string"] == b""
-            assert scope["headers"] == []
-            assert scope["server"] == ["localhost", 80]
-            assert isinstance(scope["extensions"], dict)
-            assert scope["extensions"]["environ"] == {
-                "SERVER_PROTOCOL": b"HTTP/1.1",
-                "REQUEST_METHOD": b"GET",
-                "QUERY_STRING": b"",
-                "SCRIPT_NAME": b"",
-                "SERVER_NAME": b"localhost",
-                "SERVER_PORT": b"80",
-            }
+        message = await receive()
+        assert message["type"] == "http.request"
+        assert not message.get("body")
+        assert not message.get("more_body")
 
-            message = await receive()
-            assert message["type"] == "http.request"
-            assert not message.get("body")
-            assert not message.get("more_body")
-
-            await send(
-                {
-                    "type": "http.response.start",
-                    "status": 200,
-                    "headers": [(b"content-type", b"text/plain; charset=UTF-8")],
-                }
-            )
-            await send({"type": "http.response.body", "body": b"Hello World!"})
-
-        reader = reader_class.return_value
-        writer = writer_class.return_value
-        headers = sioscgi.request.Headers(
+        await send(
             {
-                "SERVER_PROTOCOL": b"HTTP/1.1",
-                "REQUEST_METHOD": b"GET",
-                "QUERY_STRING": b"",
-                "SCRIPT_NAME": b"",
-                "SERVER_NAME": b"localhost",
-                "SERVER_PORT": b"80",
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"text/plain; charset=UTF-8")],
             }
         )
-        reader.next_event.side_effect = [headers, sioscgi.request.End()]
-        writer.send.return_value = b""
-        container = Container(app, None)
-        coro = Connection(container).run()
-        assert isinstance(coro, Coroutine)
-        with pytest.raises(StopIteration):
-            coro.send(None)
-        assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
-        assert list(writer.mock_calls) == [
-            call.send(
-                EventMatcher(
-                    sioscgi.response.Headers(
-                        "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
-                    )
+        await send({"type": "http.response.body", "body": b"Hello World!"})
+
+    reader = reader_class.return_value
+    writer = writer_class.return_value
+    headers = sioscgi.request.Headers(
+        {
+            "SERVER_PROTOCOL": b"HTTP/1.1",
+            "REQUEST_METHOD": b"GET",
+            "QUERY_STRING": b"",
+            "SCRIPT_NAME": b"",
+            "SERVER_NAME": b"localhost",
+            "SERVER_PORT": b"80",
+        }
+    )
+    reader.next_event.side_effect = [headers, sioscgi.request.End()]
+    writer.send.return_value = b""
+    container = Container(app, None)
+    coro = Connection(container).run()
+    assert isinstance(coro, Coroutine)
+    with pytest.raises(StopIteration):
+        coro.send(None)
+    assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
+    assert list(writer.mock_calls) == [
+        call.send(
+            EventMatcher(
+                sioscgi.response.Headers(
+                    "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
                 )
-            ),
-            call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
-            call.send(EventMatcher(sioscgi.response.End())),
-        ]
+            )
+        ),
+        call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
+        call.send(EventMatcher(sioscgi.response.End())),
+    ]
 
-    @patch("sioscgi.response.SCGIWriter")
-    @patch("sioscgi.request.SCGIReader")
-    def test_multi_body(
-        self: Self, reader_class: MagicMock, writer_class: MagicMock
+
+@patch("sioscgi.response.SCGIWriter")
+@patch("sioscgi.request.SCGIReader")
+def test_multi_body(reader_class: MagicMock, writer_class: MagicMock) -> None:
+    """Test request and response bodies transported in multiple parts."""
+
+    async def app(
+        scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
     ) -> None:
-        """Test request and response bodies transported in multiple parts."""
+        if scope["type"] == "lifespan":
+            msg = "Lifespan protocol not supported by this application"
+            raise ValueError(msg)
 
-        async def app(
-            scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
-        ) -> None:
-            if scope["type"] == "lifespan":
-                msg = "Lifespan protocol not supported by this application"
-                raise ValueError(msg)
+        assert scope["type"] == "http"
+        assert isinstance(scope["asgi"], dict)
+        assert scope["asgi"]["version"] == "3.0"
+        assert scope["asgi"]["spec_version"] == "2.4"
+        assert scope["http_version"] == "1.1"
+        assert scope["method"] == "GET"
+        assert scope["scheme"] == "http"
+        assert scope["path"] == ""
+        assert scope["query_string"] == b""
+        assert scope["headers"] == [[b"content-length", b"8"]]
+        assert scope["server"] == ["localhost", 80]
 
-            assert scope["type"] == "http"
-            assert isinstance(scope["asgi"], dict)
-            assert scope["asgi"]["version"] == "3.0"
-            assert scope["asgi"]["spec_version"] == "2.4"
-            assert scope["http_version"] == "1.1"
-            assert scope["method"] == "GET"
-            assert scope["scheme"] == "http"
-            assert scope["path"] == ""
-            assert scope["query_string"] == b""
-            assert scope["headers"] == [[b"content-length", b"8"]]
-            assert scope["server"] == ["localhost", 80]
+        message = await receive()
+        assert message["type"] == "http.request"
+        assert message.get("body") == b"abcd"
+        assert message.get("more_body")
 
-            message = await receive()
-            assert message["type"] == "http.request"
-            assert message.get("body") == b"abcd"
-            assert message.get("more_body")
+        message = await receive()
+        assert message["type"] == "http.request"
+        assert message.get("body") == b"efgh"
+        assert message.get("more_body")
 
-            message = await receive()
-            assert message["type"] == "http.request"
-            assert message.get("body") == b"efgh"
-            assert message.get("more_body")
+        message = await receive()
+        assert message["type"] == "http.request"
+        assert not message.get("body")
+        assert not message.get("more_body")
 
-            message = await receive()
-            assert message["type"] == "http.request"
-            assert not message.get("body")
-            assert not message.get("more_body")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"text/plain; charset=UTF-8"),
+                    (b"content-length", b"12"),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": b"Hello ", "more_body": True})
+        await send({"type": "http.response.body", "body": b"World!"})
 
-            await send(
-                {
-                    "type": "http.response.start",
-                    "status": 200,
-                    "headers": [
-                        (b"content-type", b"text/plain; charset=UTF-8"),
-                        (b"content-length", b"12"),
+    reader = reader_class.return_value
+    writer = writer_class.return_value
+    headers = sioscgi.request.Headers(
+        {
+            "SERVER_PROTOCOL": b"HTTP/1.1",
+            "REQUEST_METHOD": b"GET",
+            "QUERY_STRING": b"",
+            "SCRIPT_NAME": b"",
+            "SERVER_NAME": b"localhost",
+            "SERVER_PORT": b"80",
+            "CONTENT_LENGTH": b"8",
+        }
+    )
+    reader.next_event.side_effect = [
+        headers,
+        sioscgi.request.Body(b"abcd"),
+        sioscgi.request.Body(b"efgh"),
+        sioscgi.request.End(),
+    ]
+    writer.send.return_value = b""
+    container = Container(app, None)
+    coro = Connection(container).run()
+    assert isinstance(coro, Coroutine)
+    with pytest.raises(StopIteration):
+        coro.send(None)
+    assert list(reader.mock_calls) == [
+        call.next_event(),
+        call.next_event(),
+        call.next_event(),
+        call.next_event(),
+    ]
+    assert list(writer.mock_calls) == [
+        call.send(
+            EventMatcher(
+                sioscgi.response.Headers(
+                    "200 OK",
+                    [
+                        ("Content-Type", "text/plain; charset=UTF-8"),
+                        ("content-length", "12"),
                     ],
-                }
-            )
-            await send(
-                {"type": "http.response.body", "body": b"Hello ", "more_body": True}
-            )
-            await send({"type": "http.response.body", "body": b"World!"})
-
-        reader = reader_class.return_value
-        writer = writer_class.return_value
-        headers = sioscgi.request.Headers(
-            {
-                "SERVER_PROTOCOL": b"HTTP/1.1",
-                "REQUEST_METHOD": b"GET",
-                "QUERY_STRING": b"",
-                "SCRIPT_NAME": b"",
-                "SERVER_NAME": b"localhost",
-                "SERVER_PORT": b"80",
-                "CONTENT_LENGTH": b"8",
-            }
-        )
-        reader.next_event.side_effect = [
-            headers,
-            sioscgi.request.Body(b"abcd"),
-            sioscgi.request.Body(b"efgh"),
-            sioscgi.request.End(),
-        ]
-        writer.send.return_value = b""
-        container = Container(app, None)
-        coro = Connection(container).run()
-        assert isinstance(coro, Coroutine)
-        with pytest.raises(StopIteration):
-            coro.send(None)
-        assert list(reader.mock_calls) == [
-            call.next_event(),
-            call.next_event(),
-            call.next_event(),
-            call.next_event(),
-        ]
-        assert list(writer.mock_calls) == [
-            call.send(
-                EventMatcher(
-                    sioscgi.response.Headers(
-                        "200 OK",
-                        [
-                            ("Content-Type", "text/plain; charset=UTF-8"),
-                            ("content-length", "12"),
-                        ],
-                    )
                 )
-            ),
-            call.send(EventMatcher(sioscgi.response.Body(b"Hello "))),
-            call.send(EventMatcher(sioscgi.response.Body(b"World!"))),
-            call.send(EventMatcher(sioscgi.response.End())),
-        ]
-
-    @patch("sioscgi.response.SCGIWriter")
-    @patch("sioscgi.request.SCGIReader")
-    def test_disconnect_after_request(
-        self: Self, reader_class: MagicMock, writer_class: MagicMock
-    ) -> None:
-        """Test a long polling client disconnecting before the response body is sent."""
-
-        async def app(
-            scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
-        ) -> None:
-            if scope["type"] == "lifespan":
-                msg = "Lifespan protocol not supported by this application"
-                raise ValueError(msg)
-
-            assert scope["type"] == "http"
-            assert isinstance(scope["asgi"], dict)
-            assert scope["asgi"]["version"] == "3.0"
-            assert scope["asgi"]["spec_version"] == "2.4"
-            assert scope["http_version"] == "1.1"
-            assert scope["method"] == "GET"
-            assert scope["scheme"] == "http"
-            assert scope["path"] == ""
-            assert scope["query_string"] == b""
-            assert scope["headers"] == []
-            assert scope["server"] == ["localhost", 80]
-
-            message = await receive()
-            assert message["type"] == "http.request"
-            assert not message.get("body")
-            assert not message.get("more_body")
-
-            message = await receive()
-            assert message["type"] == "http.disconnect"
-
-        reader = reader_class.return_value
-        writer = writer_class.return_value
-        headers = sioscgi.request.Headers(
-            {
-                "SERVER_PROTOCOL": b"HTTP/1.1",
-                "REQUEST_METHOD": b"GET",
-                "QUERY_STRING": b"",
-                "SCRIPT_NAME": b"",
-                "SERVER_NAME": b"localhost",
-                "SERVER_PORT": b"80",
-            }
-        )
-        reader.next_event.side_effect = [headers, sioscgi.request.End(), None]
-        raw_read = reader.raw_read
-        raw_read.return_value = b""
-
-        class Conn(Connection):
-            """A mock connection that allows reading bytes from the mock source."""
-
-            async def read_chunk(self: Self) -> bytes:
-                ret = raw_read()
-                assert isinstance(ret, bytes)
-                return ret
-
-        writer.send.return_value = b""
-        container = Container(app, None)
-        coro = Conn(container).run()
-        assert isinstance(coro, Coroutine)
-        with pytest.raises(StopIteration):
-            coro.send(None)
-        assert list(reader.mock_calls) == [
-            call.next_event(),
-            call.next_event(),
-            call.raw_read(),
-        ]
-        writer.assert_not_called()
-
-    @patch("sioscgi.response.SCGIWriter")
-    @patch("sioscgi.request.SCGIReader")
-    def test_disconnect_during_request(
-        self: Self, reader_class: MagicMock, writer_class: MagicMock
-    ) -> None:
-        """Test a case where the client disconnects while sending the request."""
-
-        async def app(
-            scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
-        ) -> None:
-            if scope["type"] == "lifespan":
-                msg = "Lifespan protocol not supported by this application"
-                raise ValueError(msg)
-
-            assert scope["type"] == "http"
-            assert isinstance(scope["asgi"], dict)
-            assert scope["asgi"]["version"] == "3.0"
-            assert scope["asgi"]["spec_version"] == "2.4"
-            assert scope["http_version"] == "1.1"
-            assert scope["method"] == "GET"
-            assert scope["scheme"] == "http"
-            assert scope["path"] == ""
-            assert scope["query_string"] == b""
-            assert scope["headers"] == [[b"content-length", b"8"]]
-            assert scope["server"] == ["localhost", 80]
-
-            message = await receive()
-            assert message["type"] == "http.request"
-            assert message.get("body") == b"1234"
-            assert message.get("more_body")
-
-            message = await receive()
-            assert message["type"] == "http.disconnect"
-
-        reader = reader_class.return_value
-        writer = writer_class.return_value
-        headers = sioscgi.request.Headers(
-            {
-                "SERVER_PROTOCOL": b"HTTP/1.1",
-                "REQUEST_METHOD": b"GET",
-                "QUERY_STRING": b"",
-                "SCRIPT_NAME": b"",
-                "SERVER_NAME": b"localhost",
-                "SERVER_PORT": b"80",
-                "CONTENT_LENGTH": b"8",
-            }
-        )
-        reader.next_event.side_effect = [headers, sioscgi.request.Body(b"1234"), None]
-        raw_read = reader.raw_read
-        raw_read.return_value = b""
-
-        class Conn(Connection):
-            """A mock connection that allows reading bytes from the mock source."""
-
-            async def read_chunk(self: Self) -> bytes:
-                ret = raw_read()
-                assert isinstance(ret, bytes)
-                return ret
-
-        writer.send.return_value = b""
-        container = Container(app, None)
-        coro = Conn(container).run()
-        assert isinstance(coro, Coroutine)
-        with pytest.raises(StopIteration):
-            coro.send(None)
-        assert list(reader.mock_calls) == [
-            call.next_event(),
-            call.next_event(),
-            call.next_event(),
-            call.raw_read(),
-            call.receive_data(b""),
-        ]
-        writer.assert_not_called()
-
-    @patch("sioscgi.response.SCGIWriter")
-    @patch("sioscgi.request.SCGIReader")
-    def test_https(
-        self: Self, reader_class: MagicMock, writer_class: MagicMock
-    ) -> None:
-        """Test that an HTTPS request is recognized as such."""
-
-        async def app(
-            scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
-        ) -> None:
-            if scope["type"] == "lifespan":
-                msg = "Lifespan protocol not supported by this application"
-                raise ValueError(msg)
-
-            assert scope["type"] == "http"
-            assert isinstance(scope["asgi"], dict)
-            assert scope["asgi"]["version"] == "3.0"
-            assert scope["asgi"]["spec_version"] == "2.4"
-            assert scope["http_version"] == "1.1"
-            assert scope["method"] == "GET"
-            assert scope["scheme"] == "https"
-            assert scope["path"] == ""
-            assert scope["query_string"] == b""
-            assert scope["headers"] == []
-            assert scope["server"] == ["localhost", 80]
-            assert isinstance(scope["extensions"], dict)
-            assert scope["extensions"]["environ"] == {
-                "SERVER_PROTOCOL": b"HTTP/1.1",
-                "REQUEST_METHOD": b"GET",
-                "QUERY_STRING": b"",
-                "SCRIPT_NAME": b"",
-                "SERVER_NAME": b"localhost",
-                "SERVER_PORT": b"80",
-                "HTTPS": b"1",
-            }
-
-            message = await receive()
-            assert message["type"] == "http.request"
-            assert not message.get("body")
-            assert not message.get("more_body")
-
-            await send(
-                {
-                    "type": "http.response.start",
-                    "status": 200,
-                    "headers": [(b"content-type", b"text/plain; charset=UTF-8")],
-                }
             )
-            await send({"type": "http.response.body", "body": b"Hello World!"})
+        ),
+        call.send(EventMatcher(sioscgi.response.Body(b"Hello "))),
+        call.send(EventMatcher(sioscgi.response.Body(b"World!"))),
+        call.send(EventMatcher(sioscgi.response.End())),
+    ]
 
-        reader = reader_class.return_value
-        writer = writer_class.return_value
-        headers = sioscgi.request.Headers(
+
+@patch("sioscgi.response.SCGIWriter")
+@patch("sioscgi.request.SCGIReader")
+def test_disconnect_after_request(
+    reader_class: MagicMock,
+    writer_class: MagicMock,
+) -> None:
+    """Test a long polling client disconnecting before the response body is sent."""
+
+    async def app(
+        scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
+    ) -> None:
+        if scope["type"] == "lifespan":
+            msg = "Lifespan protocol not supported by this application"
+            raise ValueError(msg)
+
+        assert scope["type"] == "http"
+        assert isinstance(scope["asgi"], dict)
+        assert scope["asgi"]["version"] == "3.0"
+        assert scope["asgi"]["spec_version"] == "2.4"
+        assert scope["http_version"] == "1.1"
+        assert scope["method"] == "GET"
+        assert scope["scheme"] == "http"
+        assert scope["path"] == ""
+        assert scope["query_string"] == b""
+        assert scope["headers"] == []
+        assert scope["server"] == ["localhost", 80]
+
+        message = await receive()
+        assert message["type"] == "http.request"
+        assert not message.get("body")
+        assert not message.get("more_body")
+
+        message = await receive()
+        assert message["type"] == "http.disconnect"
+
+    reader = reader_class.return_value
+    writer = writer_class.return_value
+    headers = sioscgi.request.Headers(
+        {
+            "SERVER_PROTOCOL": b"HTTP/1.1",
+            "REQUEST_METHOD": b"GET",
+            "QUERY_STRING": b"",
+            "SCRIPT_NAME": b"",
+            "SERVER_NAME": b"localhost",
+            "SERVER_PORT": b"80",
+        }
+    )
+    reader.next_event.side_effect = [headers, sioscgi.request.End(), None]
+    raw_read = reader.raw_read
+    raw_read.return_value = b""
+
+    class Conn(Connection):
+        """A mock connection that allows reading bytes from the mock source."""
+
+        async def read_chunk(self: Self) -> bytes:
+            ret = raw_read()
+            assert isinstance(ret, bytes)
+            return ret
+
+    writer.send.return_value = b""
+    container = Container(app, None)
+    coro = Conn(container).run()
+    assert isinstance(coro, Coroutine)
+    with pytest.raises(StopIteration):
+        coro.send(None)
+    assert list(reader.mock_calls) == [
+        call.next_event(),
+        call.next_event(),
+        call.raw_read(),
+    ]
+    writer.assert_not_called()
+
+
+@patch("sioscgi.response.SCGIWriter")
+@patch("sioscgi.request.SCGIReader")
+def test_disconnect_during_request(
+    reader_class: MagicMock,
+    writer_class: MagicMock,
+) -> None:
+    """Test a case where the client disconnects while sending the request."""
+
+    async def app(
+        scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
+    ) -> None:
+        if scope["type"] == "lifespan":
+            msg = "Lifespan protocol not supported by this application"
+            raise ValueError(msg)
+
+        assert scope["type"] == "http"
+        assert isinstance(scope["asgi"], dict)
+        assert scope["asgi"]["version"] == "3.0"
+        assert scope["asgi"]["spec_version"] == "2.4"
+        assert scope["http_version"] == "1.1"
+        assert scope["method"] == "GET"
+        assert scope["scheme"] == "http"
+        assert scope["path"] == ""
+        assert scope["query_string"] == b""
+        assert scope["headers"] == [[b"content-length", b"8"]]
+        assert scope["server"] == ["localhost", 80]
+
+        message = await receive()
+        assert message["type"] == "http.request"
+        assert message.get("body") == b"1234"
+        assert message.get("more_body")
+
+        message = await receive()
+        assert message["type"] == "http.disconnect"
+
+    reader = reader_class.return_value
+    writer = writer_class.return_value
+    headers = sioscgi.request.Headers(
+        {
+            "SERVER_PROTOCOL": b"HTTP/1.1",
+            "REQUEST_METHOD": b"GET",
+            "QUERY_STRING": b"",
+            "SCRIPT_NAME": b"",
+            "SERVER_NAME": b"localhost",
+            "SERVER_PORT": b"80",
+            "CONTENT_LENGTH": b"8",
+        }
+    )
+    reader.next_event.side_effect = [headers, sioscgi.request.Body(b"1234"), None]
+    raw_read = reader.raw_read
+    raw_read.return_value = b""
+
+    class Conn(Connection):
+        """A mock connection that allows reading bytes from the mock source."""
+
+        async def read_chunk(self: Self) -> bytes:
+            ret = raw_read()
+            assert isinstance(ret, bytes)
+            return ret
+
+    writer.send.return_value = b""
+    container = Container(app, None)
+    coro = Conn(container).run()
+    assert isinstance(coro, Coroutine)
+    with pytest.raises(StopIteration):
+        coro.send(None)
+    assert list(reader.mock_calls) == [
+        call.next_event(),
+        call.next_event(),
+        call.next_event(),
+        call.raw_read(),
+        call.receive_data(b""),
+    ]
+    writer.assert_not_called()
+
+
+@patch("sioscgi.response.SCGIWriter")
+@patch("sioscgi.request.SCGIReader")
+def test_https(reader_class: MagicMock, writer_class: MagicMock) -> None:
+    """Test that an HTTPS request is recognized as such."""
+
+    async def app(
+        scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+    ) -> None:
+        if scope["type"] == "lifespan":
+            msg = "Lifespan protocol not supported by this application"
+            raise ValueError(msg)
+
+        assert scope["type"] == "http"
+        assert isinstance(scope["asgi"], dict)
+        assert scope["asgi"]["version"] == "3.0"
+        assert scope["asgi"]["spec_version"] == "2.4"
+        assert scope["http_version"] == "1.1"
+        assert scope["method"] == "GET"
+        assert scope["scheme"] == "https"
+        assert scope["path"] == ""
+        assert scope["query_string"] == b""
+        assert scope["headers"] == []
+        assert scope["server"] == ["localhost", 80]
+        assert isinstance(scope["extensions"], dict)
+        assert scope["extensions"]["environ"] == {
+            "SERVER_PROTOCOL": b"HTTP/1.1",
+            "REQUEST_METHOD": b"GET",
+            "QUERY_STRING": b"",
+            "SCRIPT_NAME": b"",
+            "SERVER_NAME": b"localhost",
+            "SERVER_PORT": b"80",
+            "HTTPS": b"1",
+        }
+
+        message = await receive()
+        assert message["type"] == "http.request"
+        assert not message.get("body")
+        assert not message.get("more_body")
+
+        await send(
             {
-                "SERVER_PROTOCOL": b"HTTP/1.1",
-                "REQUEST_METHOD": b"GET",
-                "QUERY_STRING": b"",
-                "SCRIPT_NAME": b"",
-                "SERVER_NAME": b"localhost",
-                "SERVER_PORT": b"80",
-                "HTTPS": b"1",
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"text/plain; charset=UTF-8")],
             }
         )
-        reader.next_event.side_effect = [headers, sioscgi.request.End()]
-        writer.send.return_value = b""
-        container = Container(app, None)
-        coro = Connection(container).run()
-        assert isinstance(coro, Coroutine)
-        with pytest.raises(StopIteration):
-            coro.send(None)
-        assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
-        assert list(writer.mock_calls) == [
-            call.send(
-                EventMatcher(
-                    sioscgi.response.Headers(
-                        "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
-                    )
+        await send({"type": "http.response.body", "body": b"Hello World!"})
+
+    reader = reader_class.return_value
+    writer = writer_class.return_value
+    headers = sioscgi.request.Headers(
+        {
+            "SERVER_PROTOCOL": b"HTTP/1.1",
+            "REQUEST_METHOD": b"GET",
+            "QUERY_STRING": b"",
+            "SCRIPT_NAME": b"",
+            "SERVER_NAME": b"localhost",
+            "SERVER_PORT": b"80",
+            "HTTPS": b"1",
+        }
+    )
+    reader.next_event.side_effect = [headers, sioscgi.request.End()]
+    writer.send.return_value = b""
+    container = Container(app, None)
+    coro = Connection(container).run()
+    assert isinstance(coro, Coroutine)
+    with pytest.raises(StopIteration):
+        coro.send(None)
+    assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
+    assert list(writer.mock_calls) == [
+        call.send(
+            EventMatcher(
+                sioscgi.response.Headers(
+                    "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
                 )
-            ),
-            call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
-            call.send(EventMatcher(sioscgi.response.End())),
-        ]
+            )
+        ),
+        call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
+        call.send(EventMatcher(sioscgi.response.End())),
+    ]

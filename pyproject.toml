@@ -89,7 +89,6 @@ ignore = [
 	"FBT001", # boolean-type-hint-positional-argument
 	"PLR09", # too-many-<foo>
 	"PLR2004", # magic-value-comparison
-	"PT", # pytest-related stuff
 	"S101", # assert
 	"S110", # try-except-pass
 	"TC001", # typing-only-first-party-import

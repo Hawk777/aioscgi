@@ -10,6 +10,7 @@ from typing import Self
 from unittest import TestCase
 from unittest.mock import MagicMock, call, patch
 
+import pytest
 import sioscgi.request
 import sioscgi.response
 
@@ -182,7 +183,7 @@ class TestHTTP(TestCase):
         container = Container(app, None)
         coro = Connection(container).run()
         assert isinstance(coro, Coroutine)
-        with self.assertRaises(StopIteration):
+        with pytest.raises(StopIteration):
             coro.send(None)
         assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
         assert list(writer.mock_calls) == [
@@ -276,7 +277,7 @@ class TestHTTP(TestCase):
         container = Container(app, None)
         coro = Connection(container).run()
         assert isinstance(coro, Coroutine)
-        with self.assertRaises(StopIteration):
+        with pytest.raises(StopIteration):
             coro.send(None)
         assert list(reader.mock_calls) == [
             call.next_event(),
@@ -363,7 +364,7 @@ class TestHTTP(TestCase):
         container = Container(app, None)
         coro = Conn(container).run()
         assert isinstance(coro, Coroutine)
-        with self.assertRaises(StopIteration):
+        with pytest.raises(StopIteration):
             coro.send(None)
         assert list(reader.mock_calls) == [
             call.next_event(),
@@ -435,7 +436,7 @@ class TestHTTP(TestCase):
         container = Container(app, None)
         coro = Conn(container).run()
         assert isinstance(coro, Coroutine)
-        with self.assertRaises(StopIteration):
+        with pytest.raises(StopIteration):
             coro.send(None)
         assert list(reader.mock_calls) == [
             call.next_event(),
@@ -514,7 +515,7 @@ class TestHTTP(TestCase):
         container = Container(app, None)
         coro = Connection(container).run()
         assert isinstance(coro, Coroutine)
-        with self.assertRaises(StopIteration):
+        with pytest.raises(StopIteration):
             coro.send(None)
         assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
         assert list(writer.mock_calls) == [

@@ -179,10 +179,10 @@ class TestHTTP(TestCase):
         )
         reader.next_event.side_effect = [headers, sioscgi.request.End()]
         writer.send.return_value = b""
+        container = Container(app, None)
+        coro = Connection(container).run()
+        assert isinstance(coro, Coroutine)
         with self.assertRaises(StopIteration):
-            container = Container(app, None)
-            coro = Connection(container).run()
-            assert isinstance(coro, Coroutine)
             coro.send(None)
         assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
         assert list(writer.mock_calls) == [
@@ -273,10 +273,10 @@ class TestHTTP(TestCase):
             sioscgi.request.End(),
         ]
         writer.send.return_value = b""
+        container = Container(app, None)
+        coro = Connection(container).run()
+        assert isinstance(coro, Coroutine)
         with self.assertRaises(StopIteration):
-            container = Container(app, None)
-            coro = Connection(container).run()
-            assert isinstance(coro, Coroutine)
             coro.send(None)
         assert list(reader.mock_calls) == [
             call.next_event(),
@@ -360,10 +360,10 @@ class TestHTTP(TestCase):
                 return ret
 
         writer.send.return_value = b""
+        container = Container(app, None)
+        coro = Conn(container).run()
+        assert isinstance(coro, Coroutine)
         with self.assertRaises(StopIteration):
-            container = Container(app, None)
-            coro = Conn(container).run()
-            assert isinstance(coro, Coroutine)
             coro.send(None)
         assert list(reader.mock_calls) == [
             call.next_event(),
@@ -432,10 +432,10 @@ class TestHTTP(TestCase):
                 return ret
 
         writer.send.return_value = b""
+        container = Container(app, None)
+        coro = Conn(container).run()
+        assert isinstance(coro, Coroutine)
         with self.assertRaises(StopIteration):
-            container = Container(app, None)
-            coro = Conn(container).run()
-            assert isinstance(coro, Coroutine)
             coro.send(None)
         assert list(reader.mock_calls) == [
             call.next_event(),
@@ -511,10 +511,10 @@ class TestHTTP(TestCase):
         )
         reader.next_event.side_effect = [headers, sioscgi.request.End()]
         writer.send.return_value = b""
+        container = Container(app, None)
+        coro = Connection(container).run()
+        assert isinstance(coro, Coroutine)
         with self.assertRaises(StopIteration):
-            container = Container(app, None)
-            coro = Connection(container).run()
-            assert isinstance(coro, Coroutine)
             coro.send(None)
         assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
         assert list(writer.mock_calls) == [

@@ -40,6 +40,16 @@ run ``aioscgi --unix-socket /path/to/socket mypackage.mymodule:myapp``. For
 full details on available options, run ``aioscgi --help``.
 
 
+What extensions does it implement?
+==================================
+
+aioscgi implements a non-standard extension in the ``http`` scope named
+``environ``. ``scope["extensions"]["environ"]`` is a dictionary with ``str``
+keys and ``bytes`` values containing the entire CGI environment, exactly as
+sent by the SCGI client. This can be used to extract values that the (ASGI_)
+specification does not provide a home for.
+
+
 .. _ASGI: https://asgi.readthedocs.io/
 .. _Wikipedia: https://en.wikipedia.org/wiki/Simple_Common_Gateway_Interface
 .. _Python: http://www.python.ca/scgi/

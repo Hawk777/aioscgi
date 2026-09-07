@@ -71,7 +71,7 @@ def _wrapper(application: ApplicationType, never: Awaitable[None]) -> Applicatio
         # Delegate to the application callable, catching exceptions.
         try:
             await application(scope, wrapped_receive, wrapped_send)
-        except Exception:  # pylint: disable=broad-except # noqa: BLE001
+        except Exception:  # pylint: disable=broad-except
             # Per the spec, exceptions raised by the application callable for a lifespan
             # scope should not prevent the server from working, but should just indicate
             # no support for the lifespan protocol. Run whatever is left of the lifespan

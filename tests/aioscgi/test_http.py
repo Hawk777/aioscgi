@@ -63,6 +63,10 @@ class EventMatcher:
                 return False
         return True
 
+    def __hash__(self) -> int:
+        """Raise an exception as hashing is not needed for this type."""
+        raise NotImplementedError
+
     def __str__(self: Self) -> str:
         """Return the representation of the expected event."""
         return str(self._expected)

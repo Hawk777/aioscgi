@@ -8,7 +8,7 @@ ci = [
 	"pylint-gitlab",
 ]
 dev = [
-	"mypy ~= 1.15.0",
+	"mypy ~= 2.3.1",
 	"pylint ~= 4.0.8",
 	"ruff ~= 0.16.6",
 ]

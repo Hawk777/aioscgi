@@ -10,6 +10,7 @@ ci = [
 dev = [
 	"mypy ~= 2.3.1",
 	"pylint ~= 4.0.8",
+	"pytest ~= 9.1.1",
 	"ruff ~= 0.16.6",
 ]
 
@@ -67,6 +68,11 @@ disable = [
 	"too-many-statements",
 ]
 
+[tool.pytest]
+addopts = ["--import-mode=importlib"]
+strict = true
+testpaths = ["tests"]
+
 [tool.ruff]
 src = ["src"]
 target-version = "py312"
@@ -90,3 +96,6 @@ ignore = [
 	"TC003", # typing-only-standard-library-import
 ]
 select = ["ALL"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["INP001"] # implicit-namespace-package (not really a package, with import-mode=importlib)

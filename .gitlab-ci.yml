@@ -63,4 +63,7 @@ Pylint:
 Unit tests:
   needs: []
   script:
-    - uv run python -m unittest
+    - uv run pytest --junit-xml=results.xml
+  artifacts:
+    reports:
+      junit: results.xml

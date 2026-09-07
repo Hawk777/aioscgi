@@ -54,9 +54,9 @@ class TestManager(TestCase):
             )
 
             # At this point, nothing should have happened.
-            self.assertFalse(startup_seen)
-            self.assertFalse(started_called)
-            self.assertFalse(shutdown_seen)
+            assert not startup_seen
+            assert not started_called
+            assert not shutdown_seen
 
             # Fork off a task.
             uut_future = asyncio.ensure_future(uut.run())
@@ -65,9 +65,9 @@ class TestManager(TestCase):
             await asyncio.sleep(0)
 
             # At this point, startup should have finished.
-            self.assertTrue(startup_seen)
-            self.assertTrue(started_called)
-            self.assertFalse(shutdown_seen)
+            assert startup_seen
+            assert started_called
+            assert not shutdown_seen
 
             # The lifespan manager should keep running after a successful start, so
             # cancel it.
@@ -116,9 +116,9 @@ class TestManager(TestCase):
             )
 
             # At this point, nothing should have happened.
-            self.assertFalse(startup_seen)
-            self.assertFalse(started_called)
-            self.assertFalse(shutdown_seen)
+            assert not startup_seen
+            assert not started_called
+            assert not shutdown_seen
 
             # Fork off a task.
             uut_future = asyncio.ensure_future(uut.run())
@@ -127,9 +127,9 @@ class TestManager(TestCase):
             await asyncio.sleep(0)
 
             # At this point, startup should have finished.
-            self.assertTrue(startup_seen)
-            self.assertTrue(started_called)
-            self.assertFalse(shutdown_seen)
+            assert startup_seen
+            assert started_called
+            assert not shutdown_seen
 
             # The lifespan manager should return promptly after failed startup.
             await uut_future
@@ -180,8 +180,8 @@ class TestManager(TestCase):
             )
 
             # At this point, nothing should have happened.
-            self.assertFalse(shutdown_seen)
-            self.assertFalse(shutdown_complete_called)
+            assert not shutdown_seen
+            assert not shutdown_complete_called
 
             # Fork off a task.
             uut_future = asyncio.ensure_future(uut.run())
@@ -191,8 +191,8 @@ class TestManager(TestCase):
 
             # At this point, startup should have finished, but shutdown should not have
             # started.
-            self.assertFalse(shutdown_seen)
-            self.assertFalse(shutdown_complete_called)
+            assert not shutdown_seen
+            assert not shutdown_complete_called
 
             # Initiate shutdown.
             shutting_down.set_result(None)
@@ -201,8 +201,8 @@ class TestManager(TestCase):
             await asyncio.sleep(0)
 
             # At this point, shutdown should have finished.
-            self.assertTrue(shutdown_seen)
-            self.assertTrue(shutdown_complete_called)
+            assert shutdown_seen
+            assert shutdown_complete_called
 
             # The lifespan manager should return promptly after shutdown.
             await uut_future
@@ -253,8 +253,8 @@ class TestManager(TestCase):
             )
 
             # At this point, nothing should have happened.
-            self.assertFalse(shutdown_seen)
-            self.assertFalse(shutdown_complete_called)
+            assert not shutdown_seen
+            assert not shutdown_complete_called
 
             # Fork off a task.
             uut_future = asyncio.ensure_future(uut.run())
@@ -264,8 +264,8 @@ class TestManager(TestCase):
 
             # At this point, startup should have finished, but shutdown should not have
             # started.
-            self.assertFalse(shutdown_seen)
-            self.assertFalse(shutdown_complete_called)
+            assert not shutdown_seen
+            assert not shutdown_complete_called
 
             # Initiate shutdown.
             shutting_down.set_result(None)
@@ -274,8 +274,8 @@ class TestManager(TestCase):
             await asyncio.sleep(0)
 
             # At this point, shutdown should have finished.
-            self.assertTrue(shutdown_seen)
-            self.assertTrue(shutdown_complete_called)
+            assert shutdown_seen
+            assert shutdown_complete_called
 
             # The lifespan manager should return promptly after shutdown.
             await uut_future
@@ -320,8 +320,8 @@ class TestManager(TestCase):
             )
 
             # At this point, nothing should have happened.
-            self.assertFalse(started_called)
-            self.assertFalse(shutdown_complete_called)
+            assert not started_called
+            assert not shutdown_complete_called
 
             # Fork off a task.
             uut_future = asyncio.ensure_future(uut.run())
@@ -331,8 +331,8 @@ class TestManager(TestCase):
 
             # At this point, startup should have finished, but shutdown should not have
             # started.
-            self.assertTrue(started_called)
-            self.assertFalse(shutdown_complete_called)
+            assert started_called
+            assert not shutdown_complete_called
 
             # Initiate shutdown.
             shutting_down.set_result(None)
@@ -341,8 +341,8 @@ class TestManager(TestCase):
             await asyncio.sleep(0)
 
             # At this point, shutdown should have finished.
-            self.assertTrue(started_called)
-            self.assertTrue(shutdown_complete_called)
+            assert started_called
+            assert shutdown_complete_called
 
             # The lifespan manager should return promptly after shutdown.
             await uut_future

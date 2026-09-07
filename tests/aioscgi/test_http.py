@@ -130,34 +130,31 @@ class TestHTTP(TestCase):
                 msg = "Lifespan protocol not supported by this application"
                 raise ValueError(msg)
 
-            self.assertEqual(scope["type"], "http")
+            assert scope["type"] == "http"
             assert isinstance(scope["asgi"], dict)
-            self.assertEqual(scope["asgi"]["version"], "3.0")
-            self.assertEqual(scope["asgi"]["spec_version"], "2.4")
-            self.assertEqual(scope["http_version"], "1.1")
-            self.assertEqual(scope["method"], "GET")
-            self.assertEqual(scope["scheme"], "http")
-            self.assertEqual(scope["path"], "")
-            self.assertEqual(scope["query_string"], b"")
-            self.assertEqual(scope["headers"], [])
-            self.assertEqual(scope["server"], ["localhost", 80])
+            assert scope["asgi"]["version"] == "3.0"
+            assert scope["asgi"]["spec_version"] == "2.4"
+            assert scope["http_version"] == "1.1"
+            assert scope["method"] == "GET"
+            assert scope["scheme"] == "http"
+            assert scope["path"] == ""
+            assert scope["query_string"] == b""
+            assert scope["headers"] == []
+            assert scope["server"] == ["localhost", 80]
             assert isinstance(scope["extensions"], dict)
-            self.assertEqual(
-                scope["extensions"]["environ"],
-                {
-                    "SERVER_PROTOCOL": b"HTTP/1.1",
-                    "REQUEST_METHOD": b"GET",
-                    "QUERY_STRING": b"",
-                    "SCRIPT_NAME": b"",
-                    "SERVER_NAME": b"localhost",
-                    "SERVER_PORT": b"80",
-                },
-            )
+            assert scope["extensions"]["environ"] == {
+                "SERVER_PROTOCOL": b"HTTP/1.1",
+                "REQUEST_METHOD": b"GET",
+                "QUERY_STRING": b"",
+                "SCRIPT_NAME": b"",
+                "SERVER_NAME": b"localhost",
+                "SERVER_PORT": b"80",
+            }
 
             message = await receive()
-            self.assertEqual(message["type"], "http.request")
-            self.assertFalse(message.get("body"))
-            self.assertFalse(message.get("more_body"))
+            assert message["type"] == "http.request"
+            assert not message.get("body")
+            assert not message.get("more_body")
 
             await send(
                 {
@@ -187,23 +184,18 @@ class TestHTTP(TestCase):
             coro = Connection(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
-        self.assertEqual(
-            list(reader.mock_calls), [call.next_event(), call.next_event()]
-        )
-        self.assertEqual(
-            list(writer.mock_calls),
-            [
-                call.send(
-                    EventMatcher(
-                        sioscgi.response.Headers(
-                            "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
-                        )
+        assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
+        assert list(writer.mock_calls) == [
+            call.send(
+                EventMatcher(
+                    sioscgi.response.Headers(
+                        "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
                     )
-                ),
-                call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
-                call.send(EventMatcher(sioscgi.response.End())),
-            ],
-        )
+                )
+            ),
+            call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
+            call.send(EventMatcher(sioscgi.response.End())),
+        ]
 
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
@@ -219,32 +211,32 @@ class TestHTTP(TestCase):
                 msg = "Lifespan protocol not supported by this application"
                 raise ValueError(msg)
 
-            self.assertEqual(scope["type"], "http")
+            assert scope["type"] == "http"
             assert isinstance(scope["asgi"], dict)
-            self.assertEqual(scope["asgi"]["version"], "3.0")
-            self.assertEqual(scope["asgi"]["spec_version"], "2.4")
-            self.assertEqual(scope["http_version"], "1.1")
-            self.assertEqual(scope["method"], "GET")
-            self.assertEqual(scope["scheme"], "http")
-            self.assertEqual(scope["path"], "")
-            self.assertEqual(scope["query_string"], b"")
-            self.assertEqual(scope["headers"], [[b"content-length", b"8"]])
-            self.assertEqual(scope["server"], ["localhost", 80])
+            assert scope["asgi"]["version"] == "3.0"
+            assert scope["asgi"]["spec_version"] == "2.4"
+            assert scope["http_version"] == "1.1"
+            assert scope["method"] == "GET"
+            assert scope["scheme"] == "http"
+            assert scope["path"] == ""
+            assert scope["query_string"] == b""
+            assert scope["headers"] == [[b"content-length", b"8"]]
+            assert scope["server"] == ["localhost", 80]
 
             message = await receive()
-            self.assertEqual(message["type"], "http.request")
-            self.assertEqual(message.get("body"), b"abcd")
-            self.assertTrue(message.get("more_body"))
+            assert message["type"] == "http.request"
+            assert message.get("body") == b"abcd"
+            assert message.get("more_body")
 
             message = await receive()
-            self.assertEqual(message["type"], "http.request")
-            self.assertEqual(message.get("body"), b"efgh")
-            self.assertTrue(message.get("more_body"))
+            assert message["type"] == "http.request"
+            assert message.get("body") == b"efgh"
+            assert message.get("more_body")
 
             message = await receive()
-            self.assertEqual(message["type"], "http.request")
-            self.assertFalse(message.get("body"))
-            self.assertFalse(message.get("more_body"))
+            assert message["type"] == "http.request"
+            assert not message.get("body")
+            assert not message.get("more_body")
 
             await send(
                 {
@@ -286,34 +278,28 @@ class TestHTTP(TestCase):
             coro = Connection(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
-        self.assertEqual(
-            list(reader.mock_calls),
-            [
-                call.next_event(),
-                call.next_event(),
-                call.next_event(),
-                call.next_event(),
-            ],
-        )
-        self.assertEqual(
-            list(writer.mock_calls),
-            [
-                call.send(
-                    EventMatcher(
-                        sioscgi.response.Headers(
-                            "200 OK",
-                            [
-                                ("Content-Type", "text/plain; charset=UTF-8"),
-                                ("content-length", "12"),
-                            ],
-                        )
+        assert list(reader.mock_calls) == [
+            call.next_event(),
+            call.next_event(),
+            call.next_event(),
+            call.next_event(),
+        ]
+        assert list(writer.mock_calls) == [
+            call.send(
+                EventMatcher(
+                    sioscgi.response.Headers(
+                        "200 OK",
+                        [
+                            ("Content-Type", "text/plain; charset=UTF-8"),
+                            ("content-length", "12"),
+                        ],
                     )
-                ),
-                call.send(EventMatcher(sioscgi.response.Body(b"Hello "))),
-                call.send(EventMatcher(sioscgi.response.Body(b"World!"))),
-                call.send(EventMatcher(sioscgi.response.End())),
-            ],
-        )
+                )
+            ),
+            call.send(EventMatcher(sioscgi.response.Body(b"Hello "))),
+            call.send(EventMatcher(sioscgi.response.Body(b"World!"))),
+            call.send(EventMatcher(sioscgi.response.End())),
+        ]
 
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
@@ -329,25 +315,25 @@ class TestHTTP(TestCase):
                 msg = "Lifespan protocol not supported by this application"
                 raise ValueError(msg)
 
-            self.assertEqual(scope["type"], "http")
+            assert scope["type"] == "http"
             assert isinstance(scope["asgi"], dict)
-            self.assertEqual(scope["asgi"]["version"], "3.0")
-            self.assertEqual(scope["asgi"]["spec_version"], "2.4")
-            self.assertEqual(scope["http_version"], "1.1")
-            self.assertEqual(scope["method"], "GET")
-            self.assertEqual(scope["scheme"], "http")
-            self.assertEqual(scope["path"], "")
-            self.assertEqual(scope["query_string"], b"")
-            self.assertEqual(scope["headers"], [])
-            self.assertEqual(scope["server"], ["localhost", 80])
+            assert scope["asgi"]["version"] == "3.0"
+            assert scope["asgi"]["spec_version"] == "2.4"
+            assert scope["http_version"] == "1.1"
+            assert scope["method"] == "GET"
+            assert scope["scheme"] == "http"
+            assert scope["path"] == ""
+            assert scope["query_string"] == b""
+            assert scope["headers"] == []
+            assert scope["server"] == ["localhost", 80]
 
             message = await receive()
-            self.assertEqual(message["type"], "http.request")
-            self.assertFalse(message.get("body"))
-            self.assertFalse(message.get("more_body"))
+            assert message["type"] == "http.request"
+            assert not message.get("body")
+            assert not message.get("more_body")
 
             message = await receive()
-            self.assertEqual(message["type"], "http.disconnect")
+            assert message["type"] == "http.disconnect"
 
         reader = reader_class.return_value
         writer = writer_class.return_value
@@ -379,11 +365,12 @@ class TestHTTP(TestCase):
             coro = Conn(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
-        self.assertEqual(
-            list(reader.mock_calls),
-            [call.next_event(), call.next_event(), call.raw_read()],
-        )
-        self.assertEqual(list(writer.mock_calls), [])
+        assert list(reader.mock_calls) == [
+            call.next_event(),
+            call.next_event(),
+            call.raw_read(),
+        ]
+        writer.assert_not_called()
 
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
@@ -399,25 +386,25 @@ class TestHTTP(TestCase):
                 msg = "Lifespan protocol not supported by this application"
                 raise ValueError(msg)
 
-            self.assertEqual(scope["type"], "http")
+            assert scope["type"] == "http"
             assert isinstance(scope["asgi"], dict)
-            self.assertEqual(scope["asgi"]["version"], "3.0")
-            self.assertEqual(scope["asgi"]["spec_version"], "2.4")
-            self.assertEqual(scope["http_version"], "1.1")
-            self.assertEqual(scope["method"], "GET")
-            self.assertEqual(scope["scheme"], "http")
-            self.assertEqual(scope["path"], "")
-            self.assertEqual(scope["query_string"], b"")
-            self.assertEqual(scope["headers"], [[b"content-length", b"8"]])
-            self.assertEqual(scope["server"], ["localhost", 80])
+            assert scope["asgi"]["version"] == "3.0"
+            assert scope["asgi"]["spec_version"] == "2.4"
+            assert scope["http_version"] == "1.1"
+            assert scope["method"] == "GET"
+            assert scope["scheme"] == "http"
+            assert scope["path"] == ""
+            assert scope["query_string"] == b""
+            assert scope["headers"] == [[b"content-length", b"8"]]
+            assert scope["server"] == ["localhost", 80]
 
             message = await receive()
-            self.assertEqual(message["type"], "http.request")
-            self.assertEqual(message.get("body"), b"1234")
-            self.assertTrue(message.get("more_body"))
+            assert message["type"] == "http.request"
+            assert message.get("body") == b"1234"
+            assert message.get("more_body")
 
             message = await receive()
-            self.assertEqual(message["type"], "http.disconnect")
+            assert message["type"] == "http.disconnect"
 
         reader = reader_class.return_value
         writer = writer_class.return_value
@@ -450,17 +437,14 @@ class TestHTTP(TestCase):
             coro = Conn(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
-        self.assertEqual(
-            list(reader.mock_calls),
-            [
-                call.next_event(),
-                call.next_event(),
-                call.next_event(),
-                call.raw_read(),
-                call.receive_data(b""),
-            ],
-        )
-        self.assertEqual(list(writer.mock_calls), [])
+        assert list(reader.mock_calls) == [
+            call.next_event(),
+            call.next_event(),
+            call.next_event(),
+            call.raw_read(),
+            call.receive_data(b""),
+        ]
+        writer.assert_not_called()
 
     @patch("sioscgi.response.SCGIWriter")
     @patch("sioscgi.request.SCGIReader")
@@ -476,35 +460,32 @@ class TestHTTP(TestCase):
                 msg = "Lifespan protocol not supported by this application"
                 raise ValueError(msg)
 
-            self.assertEqual(scope["type"], "http")
+            assert scope["type"] == "http"
             assert isinstance(scope["asgi"], dict)
-            self.assertEqual(scope["asgi"]["version"], "3.0")
-            self.assertEqual(scope["asgi"]["spec_version"], "2.4")
-            self.assertEqual(scope["http_version"], "1.1")
-            self.assertEqual(scope["method"], "GET")
-            self.assertEqual(scope["scheme"], "https")
-            self.assertEqual(scope["path"], "")
-            self.assertEqual(scope["query_string"], b"")
-            self.assertEqual(scope["headers"], [])
-            self.assertEqual(scope["server"], ["localhost", 80])
+            assert scope["asgi"]["version"] == "3.0"
+            assert scope["asgi"]["spec_version"] == "2.4"
+            assert scope["http_version"] == "1.1"
+            assert scope["method"] == "GET"
+            assert scope["scheme"] == "https"
+            assert scope["path"] == ""
+            assert scope["query_string"] == b""
+            assert scope["headers"] == []
+            assert scope["server"] == ["localhost", 80]
             assert isinstance(scope["extensions"], dict)
-            self.assertEqual(
-                scope["extensions"]["environ"],
-                {
-                    "SERVER_PROTOCOL": b"HTTP/1.1",
-                    "REQUEST_METHOD": b"GET",
-                    "QUERY_STRING": b"",
-                    "SCRIPT_NAME": b"",
-                    "SERVER_NAME": b"localhost",
-                    "SERVER_PORT": b"80",
-                    "HTTPS": b"1",
-                },
-            )
+            assert scope["extensions"]["environ"] == {
+                "SERVER_PROTOCOL": b"HTTP/1.1",
+                "REQUEST_METHOD": b"GET",
+                "QUERY_STRING": b"",
+                "SCRIPT_NAME": b"",
+                "SERVER_NAME": b"localhost",
+                "SERVER_PORT": b"80",
+                "HTTPS": b"1",
+            }
 
             message = await receive()
-            self.assertEqual(message["type"], "http.request")
-            self.assertFalse(message.get("body"))
-            self.assertFalse(message.get("more_body"))
+            assert message["type"] == "http.request"
+            assert not message.get("body")
+            assert not message.get("more_body")
 
             await send(
                 {
@@ -535,20 +516,15 @@ class TestHTTP(TestCase):
             coro = Connection(container).run()
             assert isinstance(coro, Coroutine)
             coro.send(None)
-        self.assertEqual(
-            list(reader.mock_calls), [call.next_event(), call.next_event()]
-        )
-        self.assertEqual(
-            list(writer.mock_calls),
-            [
-                call.send(
-                    EventMatcher(
-                        sioscgi.response.Headers(
-                            "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
-                        )
+        assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
+        assert list(writer.mock_calls) == [
+            call.send(
+                EventMatcher(
+                    sioscgi.response.Headers(
+                        "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
                     )
-                ),
-                call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
-                call.send(EventMatcher(sioscgi.response.End())),
-            ],
-        )
+                )
+            ),
+            call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
+            call.send(EventMatcher(sioscgi.response.End())),
+        ]

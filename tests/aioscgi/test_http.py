@@ -184,8 +184,8 @@ def test_simple(reader_class: MagicMock, writer_class: MagicMock) -> None:
     assert isinstance(coro, Coroutine)
     with pytest.raises(StopIteration):
         coro.send(None)
-    assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
-    assert list(writer.mock_calls) == [
+    assert reader.mock_calls == [call.next_event(), call.next_event()]
+    assert writer.mock_calls == [
         call.send(
             EventMatcher(
                 sioscgi.response.Headers(
@@ -278,13 +278,13 @@ def test_multi_body(reader_class: MagicMock, writer_class: MagicMock) -> None:
     assert isinstance(coro, Coroutine)
     with pytest.raises(StopIteration):
         coro.send(None)
-    assert list(reader.mock_calls) == [
+    assert reader.mock_calls == [
         call.next_event(),
         call.next_event(),
         call.next_event(),
         call.next_event(),
     ]
-    assert list(writer.mock_calls) == [
+    assert writer.mock_calls == [
         call.send(
             EventMatcher(
                 sioscgi.response.Headers(
@@ -369,7 +369,7 @@ def test_disconnect_after_request(
     assert isinstance(coro, Coroutine)
     with pytest.raises(StopIteration):
         coro.send(None)
-    assert list(reader.mock_calls) == [
+    assert reader.mock_calls == [
         call.next_event(),
         call.next_event(),
         call.raw_read(),
@@ -445,7 +445,7 @@ def test_disconnect_during_request(
     assert isinstance(coro, Coroutine)
     with pytest.raises(StopIteration):
         coro.send(None)
-    assert list(reader.mock_calls) == [
+    assert reader.mock_calls == [
         call.next_event(),
         call.next_event(),
         call.next_event(),
@@ -525,8 +525,8 @@ def test_https(reader_class: MagicMock, writer_class: MagicMock) -> None:
     assert isinstance(coro, Coroutine)
     with pytest.raises(StopIteration):
         coro.send(None)
-    assert list(reader.mock_calls) == [call.next_event(), call.next_event()]
-    assert list(writer.mock_calls) == [
+    assert reader.mock_calls == [call.next_event(), call.next_event()]
+    assert writer.mock_calls == [
         call.send(
             EventMatcher(
                 sioscgi.response.Headers(

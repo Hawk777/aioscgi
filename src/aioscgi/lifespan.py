@@ -126,22 +126,22 @@ class Manager:
     """
 
     __slots__ = {  # noqa: RUF023 the attributes are ordered by function, not name
-        "_container": """The ASGI container.""",
-        "_wrapped_application": """The application, wrapped for exception handling.""",
-        "_never": """An awaitable that will never complete.""",
-        "_started": """A callable to invoke once the application has started up.""",
-        "_started_called": """Whether _started has been called.""",
+        "_container": "The ASGI container.",
+        "_wrapped_application": "The application, wrapped for exception handling.",
+        "_never": "An awaitable that will never complete.",
+        "_started": "A callable to invoke once the application has started up.",
+        "_started_called": "Whether _started has been called.",
         "_shutting_down": """
             An awaitable that becomes ready when the server begins shutting down.
             """,
         "_shutdown_complete": """
             A callable to invoke once the application has shut down.
             """,
-        "_shutdown_complete_called": """Whether _shutdown_complete has been called.""",
-        "_startup_done": """Whether startup.{complete,failed} was sent.""",
-        "_shutdown_done": """Whether shutdown.{complete,failed} was sent.""",
-        "_receive_mutex": """A mutex used to protect concurrent receives.""",
-        "_receive_iter": """An asynchronous iterator over the events to receive.""",
+        "_shutdown_complete_called": "Whether _shutdown_complete has been called.",
+        "_startup_done": "Whether startup.{complete,failed} was sent.",
+        "_shutdown_done": "Whether shutdown.{complete,failed} was sent.",
+        "_receive_mutex": "A mutex used to protect concurrent receives.",
+        "_receive_iter": "An asynchronous iterator over the events to receive.",
     }
 
     _container: Container

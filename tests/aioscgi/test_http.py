@@ -22,7 +22,7 @@ class EventMatcher:
     """A matcher that compares sioscgi event objects by their contents."""
 
     __slots__ = {
-        "_expected": """The expected value.""",
+        "_expected": "The expected value.",
     }
 
     _expected: sioscgi.response.Event

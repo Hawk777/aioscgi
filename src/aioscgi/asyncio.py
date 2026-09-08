@@ -25,8 +25,8 @@ class Connection(http.Connection):
     """An HTTP connection over asyncio."""
 
     __slots__ = {
-        "_stream_reader": """The stream reader for the connection.""",
-        "_stream_writer": """The stream writer for the connection.""",
+        "_stream_reader": "The stream reader for the connection.",
+        "_stream_writer": "The stream writer for the connection.",
     }
 
     _stream_reader: asyncio.StreamReader
@@ -71,8 +71,8 @@ class ConnectionHandler:
     """
 
     __slots__ = {
-        "_connection_tasks",
-        "_container",
+        "_connection_tasks": "All running connection-handling tasks.",
+        "_container": "The ASGI container.",
     }
 
     _connection_tasks: set[asyncio.Task[None]]

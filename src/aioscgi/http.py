@@ -224,13 +224,13 @@ class Connection(abc.ABC):
     """
 
     __slots__ = {
-        "_container": """The ASGI container.""",
-        "_disconnected": """Whether the SCGI connection has been closed.""",
-        "_reader": """The SCGI protocol request state machine.""",
-        "_reader_mutex": """A mutex held by the task calling _receive.""",
-        "_request_ended": """Whether the end of the request has been received.""",
-        "_writer": """The SCGI protocol response state machine.""",
-        "_writer_mutex": """A mutex held by the task calling _send.""",
+        "_container": "The ASGI container.",
+        "_disconnected": "Whether the SCGI connection has been closed.",
+        "_reader": "The SCGI protocol request state machine.",
+        "_reader_mutex": "A mutex held by the task calling _receive.",
+        "_request_ended": "Whether the end of the request has been received.",
+        "_writer": "The SCGI protocol response state machine.",
+        "_writer_mutex": "A mutex held by the task calling _send.",
     }
 
     _container: Container

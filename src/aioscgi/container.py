@@ -16,9 +16,9 @@ class Container:
     """
 
     __slots__ = {
-        "application": """The application callable.""",
-        "base_uri": """The base URI prefix.""",
-        "state": """The application state dictionary.""",
+        "application": "The application callable.",
+        "base_uri": "The base URI prefix.",
+        "state": "The application state dictionary.",
     }
 
     application: ApplicationType

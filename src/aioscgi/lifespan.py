@@ -227,20 +227,17 @@ class Manager:
     async def _send(self: Self, event: EventOrScope) -> None:
         event_type = event["type"]
         assert isinstance(event_type, str)
-        parts = event_type.split(".")
+        (proto, stage, outcome) = event_type.split(".")
         if (
-            len(parts) != 3
-            or parts[0] != "lifespan"
-            or parts[1] not in {"startup", "shutdown"}
-            or parts[2] not in {"complete", "failed"}
+            proto != "lifespan"
+            or stage not in {"startup", "shutdown"}
+            or outcome not in {"complete", "failed"}
         ):
             msg = (
                 f"Unrecognized event type {event_type}, expected "
                 "lifespan.{startup,shutdown}.{complete,failed}"
             )
             raise ValueError(msg)
-        stage = parts[1]
-        outcome = parts[2]
 
         if outcome == "complete":
             error_message = None

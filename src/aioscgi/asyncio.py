@@ -64,7 +64,7 @@ class Connection(http.Connection):
             await self._stream_writer.drain()
 
 
-class ConnectionHandler:
+class _ConnectionHandler:
     """
     A handler for incoming connections.
 
@@ -83,7 +83,7 @@ class ConnectionHandler:
 
     def __init__(self: Self, container: Container) -> None:
         """
-        Construct a new ConnectionHandler.
+        Construct a new _ConnectionHandler.
 
         :param container: The ASGI container.
         """
@@ -186,7 +186,7 @@ async def _main_coroutine(
 
         try:
             # Create a connection handler.
-            connection_handler = ConnectionHandler(container)
+            connection_handler = _ConnectionHandler(container)
 
             # Start the server.
             servers = await start_server_fn(connection_handler.handle_connection)

@@ -76,30 +76,6 @@ class EventMatcher:
         return repr(self._expected)
 
 
-async def _unusable_read_cb() -> bytes:
-    """
-    Fail when called.
-
-    This function can be used as a read callback in tests where the read callback should
-    not be invoked (for example, because the SCGIConnection is mocked to return events
-    immediately without asking for any data).
-    """
-    msg = "This callback should not be called"
-    raise NotImplementedError(msg)
-
-
-async def _unusable_write_cb(_data: bytes, _wait_hint: bool) -> None:
-    """
-    Fail when called.
-
-    This function can be used as a write callback in tests where the write callback
-    should not be invoked (for example, because the SCGIConnection is mocked to store
-    the pushed events rather than encoding them into bytes and sending them).
-    """
-    msg = "This callback should not be called"
-    raise NotImplementedError(msg)
-
-
 class Connection(http.Connection):
     """A mock Connection in which read_chunk and write_chunk cannot be used."""
 

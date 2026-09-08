@@ -231,8 +231,8 @@ class Manager:
         if (
             len(parts) != 3
             or parts[0] != "lifespan"
-            or parts[1] not in ("startup", "shutdown")
-            or parts[2] not in ("complete", "failed")
+            or parts[1] not in {"startup", "shutdown"}
+            or parts[2] not in {"complete", "failed"}
         ):
             msg = (
                 f"Unrecognized event type {event_type}, expected "

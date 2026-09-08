@@ -303,7 +303,7 @@ async def _start_servers_gen(
         if extra_socket.type != socket.SOCK_STREAM:
             msg = f"External socket is type {extra_socket.type}, SOCK_STREAM required"
             raise ValueError(msg)
-        if extra_socket.family in (socket.AF_INET, socket.AF_INET6):
+        if extra_socket.family in {socket.AF_INET, socket.AF_INET6}:
             yield await asyncio.start_server(handle_connection, sock=extra_socket)
         elif extra_socket.family == socket.AF_UNIX:
             yield await start_unix_server_from_socket(extra_socket)

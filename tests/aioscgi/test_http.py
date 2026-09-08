@@ -351,7 +351,7 @@ def test_disconnect_after_request(
             "SERVER_PORT": b"80",
         },
     )
-    reader.next_event.side_effect = [headers, sioscgi.request.End(), None]
+    reader.next_event.side_effect = [headers, sioscgi.request.End()]
     raw_read = reader.raw_read
     raw_read.return_value = b""
 

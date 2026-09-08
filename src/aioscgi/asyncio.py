@@ -13,7 +13,7 @@ import socket
 import sys
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from contextlib import AbstractAsyncContextManager
-from typing import Self
+from typing import Self, override
 
 from . import http, lifespan
 from .container import Container
@@ -49,13 +49,16 @@ class Connection(http.Connection):
         self._stream_reader = reader
         self._stream_writer = writer
 
-    def create_mutex(self: Self) -> AbstractAsyncContextManager[None]:  # noqa: D102
+    @override
+    def create_mutex(self: Self) -> AbstractAsyncContextManager[None]:
         return asyncio.Lock()
 
-    async def read_chunk(self: Self) -> bytes:  # noqa: D102
+    @override
+    async def read_chunk(self: Self) -> bytes:
         return await self._stream_reader.read(io.DEFAULT_BUFFER_SIZE)
 
-    async def write_chunk(self: Self, data: bytes, drain: bool) -> None:  # noqa: D102
+    @override
+    async def write_chunk(self: Self, data: bytes, drain: bool) -> None:
         self._stream_writer.write(data)
         if drain:
             await self._stream_writer.drain()

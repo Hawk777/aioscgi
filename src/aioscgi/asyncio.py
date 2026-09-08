@@ -172,7 +172,7 @@ async def _main_coroutine(
         lifespan_shutting_down,
         lifespan_shutdown_complete.set_result,
     )
-    lifespan_future = asyncio.ensure_future(lifespan_manager.run())
+    lifespan_future = asyncio.create_task(lifespan_manager.run())
 
     try:
         # Wait for the application to start.

@@ -56,7 +56,7 @@ def test_lifespan_startup_successful() -> None:
         assert not shutdown_seen
 
         # Fork off a task.
-        uut_future = asyncio.ensure_future(uut.run())
+        uut_future = asyncio.create_task(uut.run())
 
         # Let the task run.
         await asyncio.sleep(0)
@@ -121,7 +121,7 @@ def test_lifespan_startup_failed() -> None:
         assert not shutdown_seen
 
         # Fork off a task.
-        uut_future = asyncio.ensure_future(uut.run())
+        uut_future = asyncio.create_task(uut.run())
 
         # Let the task run.
         await asyncio.sleep(0)
@@ -187,7 +187,7 @@ def test_lifespan_shutdown_successful() -> None:
         assert not shutdown_complete_called
 
         # Fork off a task.
-        uut_future = asyncio.ensure_future(uut.run())
+        uut_future = asyncio.create_task(uut.run())
 
         # Let the task run.
         await asyncio.sleep(0)
@@ -263,7 +263,7 @@ def test_lifespan_shutdown_failed() -> None:
         assert not shutdown_complete_called
 
         # Fork off a task.
-        uut_future = asyncio.ensure_future(uut.run())
+        uut_future = asyncio.create_task(uut.run())
 
         # Let the task run.
         await asyncio.sleep(0)
@@ -333,7 +333,7 @@ def test_lifespan_not_supported() -> None:
         assert not shutdown_complete_called
 
         # Fork off a task.
-        uut_future = asyncio.ensure_future(uut.run())
+        uut_future = asyncio.create_task(uut.run())
 
         # Let the task run.
         await asyncio.sleep(0)

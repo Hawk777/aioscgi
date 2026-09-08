@@ -176,7 +176,8 @@ async def _main_coroutine(
         startup_error = await lifespan_started
         if startup_error is not None:
             logging.getLogger(__name__).error(
-                "Application startup failed: %s", startup_error
+                "Application startup failed: %s",
+                startup_error,
             )
             return
 
@@ -194,7 +195,8 @@ async def _main_coroutine(
             # Wait until requested to terminate.
             signal_name = await term_sig
             logging.getLogger(__name__).info(
-                "Caught termination signal %s", signal_name
+                "Caught termination signal %s",
+                signal_name,
             )
 
             # Notify the listener.
@@ -227,7 +229,8 @@ async def _main_coroutine(
             shutdown_error = await lifespan_shutdown_complete
             if shutdown_error is not None:
                 logging.getLogger(__name__).error(
-                    "Application shutdown failed: %s", shutdown_error
+                    "Application shutdown failed: %s",
+                    shutdown_error,
                 )
             await lifespan_future
     finally:
@@ -256,7 +259,8 @@ async def _start_servers_gen(
     unix_paths: Iterable[pathlib.Path],
     extra_sockets: Iterable[socket.socket],
     handle_connection: Callable[
-        [asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]
+        [asyncio.StreamReader, asyncio.StreamWriter],
+        Awaitable[None],
     ],
 ) -> AsyncIterable[asyncio.Server]:
     """
@@ -305,7 +309,9 @@ async def _start_servers_gen(
             raise ValueError(msg)
     for tcp_address in tcp_addresses:
         yield await asyncio.start_server(
-            handle_connection, host=tcp_address.host, port=tcp_address.port
+            handle_connection,
+            host=tcp_address.host,
+            port=tcp_address.port,
         )
     for unix_path in unix_paths:
         server = await asyncio.start_unix_server(handle_connection, path=unix_path)
@@ -318,7 +324,8 @@ async def _start_servers(
     unix_paths: Iterable[pathlib.Path],
     extra_sockets: Iterable[socket.socket],
     handle_connection: Callable[
-        [asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]
+        [asyncio.StreamReader, asyncio.StreamWriter],
+        Awaitable[None],
     ],
 ) -> list[asyncio.Server]:
     """
@@ -337,7 +344,10 @@ async def _start_servers(
         servers = [
             stack.enter_context(contextlib.closing(i))
             async for i in _start_servers_gen(
-                tcp_addresses, unix_paths, extra_sockets, handle_connection
+                tcp_addresses,
+                unix_paths,
+                extra_sockets,
+                handle_connection,
             )
         ]
         stack.pop_all()
@@ -371,5 +381,5 @@ def run(
             functools.partial(_start_servers, tcp_addresses, unix_paths, extra_sockets),
             container,
             listener,
-        )
+        ),
     )

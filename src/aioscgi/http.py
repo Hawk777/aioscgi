@@ -107,7 +107,8 @@ def _calc_status(status: int) -> str:
 
 
 def _make_scope(
-    container: Container, environ: Mapping[str, bytes]
+    container: Container,
+    environ: Mapping[str, bytes],
 ) -> EventOrScope | None:
     """
     Convert a CGI/SCGI environment mapping into an ASGI HTTP scope dictionary.
@@ -341,7 +342,7 @@ class Connection(abc.ABC):
                 # where the application wants to wait for either some external event or
                 # the client to disconnect, for long polling.
                 logging.getLogger(__name__).debug(
-                    "receive called after end of request: wait for disconnect"
+                    "receive called after end of request: wait for disconnect",
                 )
                 await self._read_chunk_wrapper()
                 self._disconnected = True
@@ -394,7 +395,8 @@ class Connection(abc.ABC):
                     if k.lower() != "transfer-encoding"
                 ]
                 encoded = sioscgi.response.Headers(
-                    _calc_status(status_code), filtered_headers
+                    _calc_status(status_code),
+                    filtered_headers,
                 )
                 await self._send_event(encoded, drain=False)
             elif event_type == "http.response.body":
@@ -420,7 +422,9 @@ class Connection(abc.ABC):
             return b""
 
     async def _send_event(
-        self: Self, event: sioscgi.response.Event, drain: bool
+        self: Self,
+        event: sioscgi.response.Event,
+        drain: bool,
     ) -> None:
         """Send an event to the SCGI client."""
         raw = self._writer.send(event)

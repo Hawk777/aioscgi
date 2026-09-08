@@ -17,7 +17,8 @@ SendFunction = Callable[[EventOrScope], Awaitable[None]]
 """The type of the send function."""
 
 ApplicationType = Callable[
-    [EventOrScope, ReceiveFunction, SendFunction], Awaitable[Any]
+    [EventOrScope, ReceiveFunction, SendFunction],
+    Awaitable[Any],
 ]
 """The type of an ASGI application callable."""
 

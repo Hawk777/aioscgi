@@ -26,7 +26,9 @@ class Container:
     state: dict[Any, Any]
 
     def __init__(
-        self: Self, application: ApplicationType, base_uri: str | None
+        self: Self,
+        application: ApplicationType,
+        base_uri: str | None,
     ) -> None:
         """
         Construct a new ASGI container.

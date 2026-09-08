@@ -119,7 +119,9 @@ def test_simple(reader_class: MagicMock, writer_class: MagicMock) -> None:
     """Test a simple application."""
 
     async def app(
-        scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+        scope: EventOrScope,
+        receive: ReceiveFunction,
+        send: SendFunction,
     ) -> None:
         if scope["type"] == "lifespan":
             msg = "Lifespan protocol not supported by this application"
@@ -156,7 +158,7 @@ def test_simple(reader_class: MagicMock, writer_class: MagicMock) -> None:
                 "type": "http.response.start",
                 "status": 200,
                 "headers": [(b"content-type", b"text/plain; charset=UTF-8")],
-            }
+            },
         )
         await send({"type": "http.response.body", "body": b"Hello World!"})
 
@@ -170,7 +172,7 @@ def test_simple(reader_class: MagicMock, writer_class: MagicMock) -> None:
             "SCRIPT_NAME": b"",
             "SERVER_NAME": b"localhost",
             "SERVER_PORT": b"80",
-        }
+        },
     )
     reader.next_event.side_effect = [headers, sioscgi.request.End()]
     writer.send.return_value = b""
@@ -184,9 +186,10 @@ def test_simple(reader_class: MagicMock, writer_class: MagicMock) -> None:
         call.send(
             EventMatcher(
                 sioscgi.response.Headers(
-                    "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
-                )
-            )
+                    "200 OK",
+                    [("Content-Type", "text/plain; charset=UTF-8")],
+                ),
+            ),
         ),
         call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
         call.send(EventMatcher(sioscgi.response.End())),
@@ -199,7 +202,9 @@ def test_multi_body(reader_class: MagicMock, writer_class: MagicMock) -> None:
     """Test request and response bodies transported in multiple parts."""
 
     async def app(
-        scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+        scope: EventOrScope,
+        receive: ReceiveFunction,
+        send: SendFunction,
     ) -> None:
         if scope["type"] == "lifespan":
             msg = "Lifespan protocol not supported by this application"
@@ -240,7 +245,7 @@ def test_multi_body(reader_class: MagicMock, writer_class: MagicMock) -> None:
                     (b"content-type", b"text/plain; charset=UTF-8"),
                     (b"content-length", b"12"),
                 ],
-            }
+            },
         )
         await send({"type": "http.response.body", "body": b"Hello ", "more_body": True})
         await send({"type": "http.response.body", "body": b"World!"})
@@ -256,7 +261,7 @@ def test_multi_body(reader_class: MagicMock, writer_class: MagicMock) -> None:
             "SERVER_NAME": b"localhost",
             "SERVER_PORT": b"80",
             "CONTENT_LENGTH": b"8",
-        }
+        },
     )
     reader.next_event.side_effect = [
         headers,
@@ -285,8 +290,8 @@ def test_multi_body(reader_class: MagicMock, writer_class: MagicMock) -> None:
                         ("Content-Type", "text/plain; charset=UTF-8"),
                         ("content-length", "12"),
                     ],
-                )
-            )
+                ),
+            ),
         ),
         call.send(EventMatcher(sioscgi.response.Body(b"Hello "))),
         call.send(EventMatcher(sioscgi.response.Body(b"World!"))),
@@ -303,7 +308,9 @@ def test_disconnect_after_request(
     """Test a long polling client disconnecting before the response body is sent."""
 
     async def app(
-        scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
+        scope: EventOrScope,
+        receive: ReceiveFunction,
+        _: SendFunction,
     ) -> None:
         if scope["type"] == "lifespan":
             msg = "Lifespan protocol not supported by this application"
@@ -339,7 +346,7 @@ def test_disconnect_after_request(
             "SCRIPT_NAME": b"",
             "SERVER_NAME": b"localhost",
             "SERVER_PORT": b"80",
-        }
+        },
     )
     reader.next_event.side_effect = [headers, sioscgi.request.End(), None]
     raw_read = reader.raw_read
@@ -376,7 +383,9 @@ def test_disconnect_during_request(
     """Test a case where the client disconnects while sending the request."""
 
     async def app(
-        scope: EventOrScope, receive: ReceiveFunction, _: SendFunction
+        scope: EventOrScope,
+        receive: ReceiveFunction,
+        _: SendFunction,
     ) -> None:
         if scope["type"] == "lifespan":
             msg = "Lifespan protocol not supported by this application"
@@ -413,7 +422,7 @@ def test_disconnect_during_request(
             "SERVER_NAME": b"localhost",
             "SERVER_PORT": b"80",
             "CONTENT_LENGTH": b"8",
-        }
+        },
     )
     reader.next_event.side_effect = [headers, sioscgi.request.Body(b"1234"), None]
     raw_read = reader.raw_read
@@ -449,7 +458,9 @@ def test_https(reader_class: MagicMock, writer_class: MagicMock) -> None:
     """Test that an HTTPS request is recognized as such."""
 
     async def app(
-        scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+        scope: EventOrScope,
+        receive: ReceiveFunction,
+        send: SendFunction,
     ) -> None:
         if scope["type"] == "lifespan":
             msg = "Lifespan protocol not supported by this application"
@@ -487,7 +498,7 @@ def test_https(reader_class: MagicMock, writer_class: MagicMock) -> None:
                 "type": "http.response.start",
                 "status": 200,
                 "headers": [(b"content-type", b"text/plain; charset=UTF-8")],
-            }
+            },
         )
         await send({"type": "http.response.body", "body": b"Hello World!"})
 
@@ -502,7 +513,7 @@ def test_https(reader_class: MagicMock, writer_class: MagicMock) -> None:
             "SERVER_NAME": b"localhost",
             "SERVER_PORT": b"80",
             "HTTPS": b"1",
-        }
+        },
     )
     reader.next_event.side_effect = [headers, sioscgi.request.End()]
     writer.send.return_value = b""
@@ -516,9 +527,10 @@ def test_https(reader_class: MagicMock, writer_class: MagicMock) -> None:
         call.send(
             EventMatcher(
                 sioscgi.response.Headers(
-                    "200 OK", [("Content-Type", "text/plain; charset=UTF-8")]
-                )
-            )
+                    "200 OK",
+                    [("Content-Type", "text/plain; charset=UTF-8")],
+                ),
+            ),
         ),
         call.send(EventMatcher(sioscgi.response.Body(b"Hello World!"))),
         call.send(EventMatcher(sioscgi.response.End())),

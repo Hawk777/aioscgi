@@ -21,7 +21,9 @@ def _wrapper(application: ApplicationType, never: Awaitable[None]) -> Applicatio
     """
 
     async def impl(
-        scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+        scope: EventOrScope,
+        receive: ReceiveFunction,
+        send: SendFunction,
     ) -> None:
         nonlocal application, never
 

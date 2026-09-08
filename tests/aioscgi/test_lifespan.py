@@ -18,7 +18,9 @@ def test_lifespan_startup_successful() -> None:
         shutdown_seen = False
 
         async def app(
-            scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+            scope: EventOrScope,
+            receive: ReceiveFunction,
+            send: SendFunction,
         ) -> None:
             nonlocal startup_seen, shutdown_seen
             assert scope["type"] == "lifespan"
@@ -81,7 +83,9 @@ def test_lifespan_startup_failed() -> None:
         shutdown_seen = False
 
         async def app(
-            scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+            scope: EventOrScope,
+            receive: ReceiveFunction,
+            send: SendFunction,
         ) -> None:
             nonlocal startup_seen, shutdown_seen
             assert scope["type"] == "lifespan"
@@ -141,7 +145,9 @@ def test_lifespan_shutdown_successful() -> None:
         shutdown_seen = False
 
         async def app(
-            scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+            scope: EventOrScope,
+            receive: ReceiveFunction,
+            send: SendFunction,
         ) -> None:
             nonlocal shutdown_seen
             assert scope["type"] == "lifespan"
@@ -215,7 +221,9 @@ def test_lifespan_shutdown_failed() -> None:
         shutdown_seen = False
 
         async def app(
-            scope: EventOrScope, receive: ReceiveFunction, send: SendFunction
+            scope: EventOrScope,
+            receive: ReceiveFunction,
+            send: SendFunction,
         ) -> None:
             nonlocal shutdown_seen
             assert scope["type"] == "lifespan"
@@ -287,7 +295,9 @@ def test_lifespan_not_supported() -> None:
     async def impl() -> None:
         # Create the application.
         async def app(
-            _scope: EventOrScope, _receive: ReceiveFunction, _send: SendFunction
+            _scope: EventOrScope,
+            _receive: ReceiveFunction,
+            _send: SendFunction,
         ) -> None:
             msg = "Lifespan protocol not supported"
             raise ValueError(msg)

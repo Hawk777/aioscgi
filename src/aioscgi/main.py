@@ -48,7 +48,8 @@ class SystemDListener(StartStopListener):
         :param target: The UNIX-domain address to send to.
         """
         self._sock = socket.socket(
-            socket.AF_UNIX, socket.SOCK_DGRAM | socket.SOCK_CLOEXEC
+            socket.AF_UNIX,
+            socket.SOCK_DGRAM | socket.SOCK_CLOEXEC,
         )
         self._target = target
 
@@ -71,7 +72,8 @@ class SystemDListener(StartStopListener):
         except OSError:
             # Failure to notify should be noted but is not fatal.
             logging.getLogger(__name__).warning(
-                "systemd notification failed", exc_info=True
+                "systemd notification failed",
+                exc_info=True,
             )
 
 
@@ -92,7 +94,7 @@ def make_start_stop_listener(systemd: bool) -> StartStopListener:
         # type is set to something other than notify, which a user could have done
         # intentionally (and they might still want --systemd for other purposes).
         logging.getLogger(__name__).info(
-            "systemd notification unavailable because NOTIFY_SOCKET unset"
+            "systemd notification unavailable because NOTIFY_SOCKET unset",
         )
         return NullaryListener()
     if path == b"":
@@ -153,7 +155,7 @@ def main() -> None:
 
         # Parse and check command-line parameters.
         parser = argparse.ArgumentParser(
-            description="Run an ASGI application under asyncio."
+            description="Run an ASGI application under asyncio.",
         )
         parser.add_argument(
             "--adapter",
@@ -164,15 +166,19 @@ def main() -> None:
         parser.add_argument(
             "--base-uri",
             type=str,
-            help="the request URI prefix to the base of the application for computing "
-            "root_path and path (default: use SCRIPT_NAME and PATH_INFO instead)",
+            help=(
+                "the request URI prefix to the base of the application for computing "
+                "root_path and path (default: use SCRIPT_NAME and PATH_INFO instead)"
+            ),
         )
         parser.add_argument(
             "--logging",
             "-l",
             type=pathlib.Path,
-            help="the JSON file containing a logging configuration dictionary per "
-            "logging.config.dictConfig (default: none)",
+            help=(
+                "the JSON file containing a logging configuration dictionary per "
+                "logging.config.dictConfig (default: none)"
+            ),
         )
         parser.add_argument(
             "--unix-socket",
@@ -197,12 +203,13 @@ def main() -> None:
             help="enable systemd integration (startup notification, socket passing)",
         )
         parser.add_argument(
-            "application", help="the dotted.module.name:callable of the application"
+            "application",
+            help="the dotted.module.name:callable of the application",
         )
         args = parser.parse_args()
         if not any((args.unix_socket, args.tcp, args.systemd)):
             parser.error(
-                "At least one of --unix-socket, --tcp, or --systemd must be supplied."
+                "At least one of --unix-socket, --tcp, or --systemd must be supplied.",
             )
 
         # Set up logging.
@@ -220,7 +227,7 @@ def main() -> None:
         if not any((args.unix_socket, args.tcp, extra_sockets)):
             parser.error(
                 "With only --systemd and not --unix-socket or --tcp, at least one "
-                "socket must be passed by systemd."
+                "socket must be passed by systemd.",
             )
 
         # Load the I/O adapter.
@@ -231,13 +238,14 @@ def main() -> None:
         app_parts = args.application.split(":")
         if len(app_parts) != 2:
             parser.error(
-                "Application callable must be module name, colon, and callable name."
+                "Application callable must be module name, colon, and callable name.",
             )
         app_module = importlib.import_module(app_parts[0])
         app_callable = None
         for part in app_parts[1].split("."):
             app_callable = getattr(
-                app_callable if app_callable is not None else app_module, part
+                app_callable if app_callable is not None else app_module,
+                part,
             )
         assert app_callable is not None
 
@@ -245,7 +253,11 @@ def main() -> None:
         start_stop_listener = make_start_stop_listener(args.systemd)
         container = Container(app_callable, args.base_uri)
         adapter.run(
-            args.tcp, args.unix_socket, extra_sockets, container, start_stop_listener
+            args.tcp,
+            args.unix_socket,
+            extra_sockets,
+            container,
+            start_stop_listener,
         )
     finally:
         logging.shutdown()

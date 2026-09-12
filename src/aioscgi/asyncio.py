@@ -109,7 +109,8 @@ class _ConnectionHandler:
                 return await Connection(self._container, reader, writer).run()
             finally:
                 writer.close()
-                await writer.wait_closed()
+                with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+                    await writer.wait_closed()
         finally:
             self._connection_tasks.remove(task)
 

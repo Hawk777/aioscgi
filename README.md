@@ -2,7 +2,9 @@
 
 aioscgi is a container implementing the Asynchronous Server Gateway Interface
 [ASGI](https://asgi.readthedocs.io/) to serve up asynchronous Web applications
-via the Simple Common Gateway Interface protocol.
+via the Simple Common Gateway Interface protocol. aioscgi supports listening on
+TCP or UNIX-domain sockets, as well as using sockets passed in via the systemd
+socket-passing protocol.
 
 
 # What is SCGI?

@@ -327,6 +327,8 @@ class Connection(abc.ABC):
         logging.getLogger(__name__).debug("Starting application with scope %s", scope)
         try:
             await self._container.application(scope, self._receive, self._send)
+        except _ConnectionClosedError:
+            pass
         except Exception:  # pylint: disable=broad-except
             logging.getLogger(__name__).exception(
                 "Uncaught exception in application callable",

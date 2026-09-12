@@ -175,7 +175,8 @@ def main() -> None:
                 "root_path and path (default: use SCRIPT_NAME and PATH_INFO instead)"
             ),
         )
-        parser.add_argument(
+        logging_group = parser.add_mutually_exclusive_group()
+        logging_group.add_argument(
             "--logging",
             "-l",
             type=pathlib.Path,
@@ -183,6 +184,13 @@ def main() -> None:
                 "the JSON file containing a logging configuration dictionary per "
                 "logging.config.dictConfig (default: none)"
             ),
+        )
+        logging_group.add_argument(
+            "--log-level",
+            default="info",
+            choices=["debug", "info", "warning", "error", "critical"],
+            help="the level of log messages to show (default: %(default)s)",
+            metavar="level",
         )
         parser.add_argument(
             "--unix-socket",
@@ -222,7 +230,7 @@ def main() -> None:
                 cfg = json.load(logging_config_file)
             logging.config.dictConfig(cfg)
         else:
-            logging.basicConfig(level=logging.INFO)
+            logging.basicConfig(level=getattr(logging, args.log_level.upper()))
 
         # Find any externally provided sockets.
         extra_sockets = find_extra_sockets(args.systemd)

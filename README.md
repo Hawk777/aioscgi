@@ -44,6 +44,8 @@ details on available options, run `aioscgi --help`.
 
 # What extensions does it implement?
 
+## environ
+
 aioscgi implements a non-standard extension in the `http` scope named
 `environ`. `scope["extensions"]["environ"]` is a dictionary with `str` keys and
 `bytes` values containing the entire CGI environment, exactly as sent by the

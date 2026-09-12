@@ -90,7 +90,7 @@ class _ConnectionHandler:
         self._connection_tasks = set()
         self._container = container
 
-    async def handle_connection(
+    def handle_connection(
         self: Self,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
@@ -101,9 +101,20 @@ class _ConnectionHandler:
         :param reader: The read half of the connection.
         :param writer: The write half of the connection.
         """
-        task = asyncio.current_task()
-        assert task is not None
+        task = asyncio.create_task(self._handle_connection_async(reader, writer))
         self._connection_tasks.add(task)
+
+    async def _handle_connection_async(
+        self: Self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        """
+        Handle a single connection, running as a task.
+
+        :param reader: The read half of the connection.
+        :param writer: The write half of the connection.
+        """
         try:
             try:
                 return await Connection(self._container, reader, writer).run()
@@ -112,6 +123,8 @@ class _ConnectionHandler:
                 with contextlib.suppress(BrokenPipeError, ConnectionResetError):
                     await writer.wait_closed()
         finally:
+            task = asyncio.current_task()
+            assert task is not None
             self._connection_tasks.remove(task)
 
     async def wait_finished(self: Self) -> None:
@@ -122,7 +135,7 @@ class _ConnectionHandler:
 
 async def _main_coroutine(
     start_server_fn: Callable[
-        [Callable[[asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]],
+        [Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]],
         Awaitable[list[asyncio.Server]],
     ],
     container: Container,
@@ -262,10 +275,7 @@ async def _start_servers_gen(
     tcp_addresses: Iterable[TCPAddress],
     unix_paths: Iterable[pathlib.Path],
     extra_sockets: Iterable[socket.socket],
-    handle_connection: Callable[
-        [asyncio.StreamReader, asyncio.StreamWriter],
-        Awaitable[None],
-    ],
+    handle_connection: Callable[[asyncio.StreamReader, asyncio.StreamWriter], None],
 ) -> AsyncIterable[asyncio.Server]:
     """
     Start a collection of TCP and UNIX-domain servers.
@@ -327,10 +337,7 @@ async def _start_servers(
     tcp_addresses: Iterable[TCPAddress],
     unix_paths: Iterable[pathlib.Path],
     extra_sockets: Iterable[socket.socket],
-    handle_connection: Callable[
-        [asyncio.StreamReader, asyncio.StreamWriter],
-        Awaitable[None],
-    ],
+    handle_connection: Callable[[asyncio.StreamReader, asyncio.StreamWriter], None],
 ) -> list[asyncio.Server]:
     """
     Start a collection of TCP and UNIX-domain servers.

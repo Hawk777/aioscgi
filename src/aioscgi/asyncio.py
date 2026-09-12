@@ -144,7 +144,6 @@ async def _main_coroutine(
     """
     Run the application in an asyncio event loop.
 
-    :param application: The application callable.
     :param start_server_fn: A function which accepts a connection handler and starts and
         returns one or more servers.
     :param container: The ASGI container to use.

@@ -17,6 +17,10 @@ from .container import Container
 from .types import EventOrScope
 
 
+class _ConnectionClosedError(BrokenPipeError):
+    """Raised from the send function if the HTTP connection was closed by the peer."""
+
+
 def _calc_http_version(server_protocol: bytes) -> str:
     """
     Convert an HTTP_PROTOCOL environment value into an HTTP protocol version string.
@@ -431,7 +435,7 @@ class Connection(abc.ABC):
         if raw:
             try:
                 await self.write_chunk(raw, drain)
-            except (BrokenPipeError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionResetError) as exp:
                 logging.getLogger(__name__).debug("SCGI socket broken on write")
                 self._disconnected = True
-                raise
+                raise _ConnectionClosedError from exp

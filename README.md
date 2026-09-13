@@ -43,7 +43,7 @@ named `myapp` and is in a file called `mypackage/mymodule.py`, you might run
 details on available options, run `aioscgi --help`.
 
 
-# What extensions does it implement?
+# What ASGI extensions does it implement?
 
 ## environ
 

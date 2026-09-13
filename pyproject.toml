@@ -74,7 +74,6 @@ ignore = [
 	"D212", # multi-line-summary-first-line
 	"FBT001", # boolean-type-hint-positional-argument
 	"PLR09", # too-many-<foo>
-	"PLR2004", # magic-value-comparison
 	"S101", # assert
 	"TC001", # typing-only-first-party-import
 	"TC003", # typing-only-standard-library-import

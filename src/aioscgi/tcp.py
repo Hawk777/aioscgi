@@ -19,12 +19,12 @@ class TCPAddress:
         :param combined: The combined string.
         """
         # The host and port part are separated by the last colon.
-        parts = combined.rsplit(":", 1)
-        if len(parts) != 2:
+        try:
+            (self.host, self.port) = combined.rsplit(":", 1)
+        except ValueError as exp:
             # No colon is present.
             msg = "Missing :PORT part"
-            raise ValueError(msg)
-        self.host, self.port = parts
+            raise ValueError(msg) from exp
         if "[" in self.port or "]" in self.port:
             # A colon is present, but not *after* the last bracket. That probably comes
             # from an IPv6 literal without a port number, in which “[a:b:c]” is split

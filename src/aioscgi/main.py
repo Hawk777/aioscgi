@@ -11,7 +11,7 @@ import pathlib
 import socket
 import sys
 from collections.abc import Iterable
-from typing import Self, override
+from typing import override
 
 from .container import Container
 from .tcp import TCPAddress
@@ -24,11 +24,11 @@ class NullaryListener(StartStopListener):
     __slots__ = ()
 
     @override
-    def started(self: Self) -> None:
+    def started(self) -> None:
         """Do nothing."""
 
     @override
-    def stopping(self: Self) -> None:
+    def stopping(self) -> None:
         """Do nothing."""
 
 
@@ -43,7 +43,7 @@ class SystemDListener(StartStopListener):
     _sock: socket.socket
     _target: bytes
 
-    def __init__(self: Self, target: bytes) -> None:
+    def __init__(self, target: bytes) -> None:
         """
         Construct a new SystemDListener.
 
@@ -56,16 +56,16 @@ class SystemDListener(StartStopListener):
         self._target = target
 
     @override
-    def started(self: Self) -> None:
+    def started(self) -> None:
         """Notify systemd that we have started."""
         self._send(b"READY=1")
 
     @override
-    def stopping(self: Self) -> None:
+    def stopping(self) -> None:
         """Notify systemd that we are stopping."""
         self._send(b"STOPPING=1")
 
-    def _send(self: Self, message: bytes) -> None:
+    def _send(self, message: bytes) -> None:
         """
         Send a notification to systemd.
 

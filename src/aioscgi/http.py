@@ -8,7 +8,7 @@ import logging
 import wsgiref.util
 from collections.abc import Mapping
 from contextlib import AbstractAsyncContextManager
-from typing import Any, Self
+from typing import Any
 
 import sioscgi.request
 import sioscgi.response
@@ -246,10 +246,7 @@ class Connection(abc.ABC):
     _writer: sioscgi.response.SCGIWriter
     _writer_mutex: AbstractAsyncContextManager[None]
 
-    def __init__(
-        self: Self,
-        container: Container,
-    ) -> None:
+    def __init__(self, container: Container) -> None:
         """
         Construct a new Connection.
 
@@ -264,7 +261,7 @@ class Connection(abc.ABC):
         self._writer_mutex = self.create_mutex()
 
     @abc.abstractmethod
-    def create_mutex(self: Self) -> AbstractAsyncContextManager[None]:
+    def create_mutex(self) -> AbstractAsyncContextManager[None]:
         """
         Create a mutex.
 
@@ -274,7 +271,7 @@ class Connection(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def read_chunk(self: Self) -> bytes:
+    async def read_chunk(self) -> bytes:
         """
         Read a chunk of bytes from the underlying connection.
 
@@ -284,7 +281,7 @@ class Connection(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def write_chunk(self: Self, data: bytes, drain: bool) -> None:
+    async def write_chunk(self, data: bytes, drain: bool) -> None:
         """
         Write a chunk of bytes to the underlying connection.
 
@@ -294,7 +291,7 @@ class Connection(abc.ABC):
         """
         raise NotImplementedError
 
-    async def run(self: Self) -> None:
+    async def run(self) -> None:
         """
         Run the application.
 
@@ -334,7 +331,7 @@ class Connection(abc.ABC):
                 "Uncaught exception in application callable",
             )
 
-    async def _receive(self: Self) -> EventOrScope:
+    async def _receive(self) -> EventOrScope:
         """Receive the next event from the SCGI client to the application."""
         async with self._reader_mutex:
             if self._disconnected:
@@ -382,7 +379,7 @@ class Connection(abc.ABC):
                     logging.getLogger(__name__).debug("Premature EOF on SCGI socket")
                     return {"type": "http.disconnect"}
 
-    async def _send(self: Self, event: EventOrScope) -> None:
+    async def _send(self, event: EventOrScope) -> None:
         async with self._writer_mutex:
             event_type = event["type"]
             if event_type == "http.response.start":
@@ -416,7 +413,7 @@ class Connection(abc.ABC):
                 msg = f"Unknown event type {event_type!r} passed to send"
                 raise ValueError(msg)
 
-    async def _read_chunk_wrapper(self: Self) -> bytes:
+    async def _read_chunk_wrapper(self) -> bytes:
         """
         Read the next chunk from the SCGI client.
 
@@ -427,11 +424,7 @@ class Connection(abc.ABC):
         except ConnectionResetError:
             return b""
 
-    async def _send_event(
-        self: Self,
-        event: sioscgi.response.Event,
-        drain: bool,
-    ) -> None:
+    async def _send_event(self, event: sioscgi.response.Event, drain: bool) -> None:
         """Send an event to the SCGI client."""
         raw = self._writer.send(event)
         if raw:

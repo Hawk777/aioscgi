@@ -13,7 +13,7 @@ import socket
 import sys
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from contextlib import AbstractAsyncContextManager
-from typing import Self, override
+from typing import override
 
 from . import http, lifespan
 from .container import Container
@@ -33,7 +33,7 @@ class Connection(http.Connection):
     _stream_writer: asyncio.StreamWriter
 
     def __init__(
-        self: Self,
+        self,
         container: Container,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
@@ -50,15 +50,15 @@ class Connection(http.Connection):
         self._stream_writer = writer
 
     @override
-    def create_mutex(self: Self) -> AbstractAsyncContextManager[None]:
+    def create_mutex(self) -> AbstractAsyncContextManager[None]:
         return asyncio.Lock()
 
     @override
-    async def read_chunk(self: Self) -> bytes:
+    async def read_chunk(self) -> bytes:
         return await self._stream_reader.read(io.DEFAULT_BUFFER_SIZE)
 
     @override
-    async def write_chunk(self: Self, data: bytes, drain: bool) -> None:
+    async def write_chunk(self, data: bytes, drain: bool) -> None:
         self._stream_writer.write(data)
         if drain:
             await self._stream_writer.drain()
@@ -81,7 +81,7 @@ class _ConnectionHandler:
     _container: Container
     _group: asyncio.TaskGroup
 
-    def __init__(self: Self, container: Container, group: asyncio.TaskGroup) -> None:
+    def __init__(self, container: Container, group: asyncio.TaskGroup) -> None:
         """
         Construct a new _ConnectionHandler.
 
@@ -92,7 +92,7 @@ class _ConnectionHandler:
         self._group = group
 
     def handle_connection(
-        self: Self,
+        self,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
@@ -105,7 +105,7 @@ class _ConnectionHandler:
         self._group.create_task(self._handle_connection_async(reader, writer))
 
     async def _handle_connection_async(
-        self: Self,
+        self,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:

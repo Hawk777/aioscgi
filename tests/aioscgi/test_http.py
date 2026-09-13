@@ -6,7 +6,7 @@ import asyncio
 import wsgiref.headers
 from collections.abc import Coroutine
 from contextlib import AbstractAsyncContextManager
-from typing import Self, override
+from typing import override
 from unittest.mock import MagicMock, _Call, call
 
 import pytest
@@ -27,7 +27,7 @@ class EventMatcher:
 
     _expected: sioscgi.response.Event
 
-    def __init__(self: Self, expected: sioscgi.response.Event) -> None:
+    def __init__(self, expected: sioscgi.response.Event) -> None:
         """
         Construct a new matcher.
 
@@ -35,7 +35,7 @@ class EventMatcher:
         """
         self._expected = expected
 
-    def __eq__(self: Self, actual: object) -> bool:
+    def __eq__(self, actual: object) -> bool:
         """
         Compare a given object to the match target.
 
@@ -67,11 +67,11 @@ class EventMatcher:
         """Raise an exception as hashing is not needed for this type."""
         raise NotImplementedError
 
-    def __str__(self: Self) -> str:
+    def __str__(self) -> str:
         """Return the representation of the expected event."""
         return str(self._expected)
 
-    def __repr__(self: Self) -> str:
+    def __repr__(self) -> str:
         """Return the representation of the expected event."""
         return repr(self._expected)
 
@@ -105,17 +105,17 @@ class Connection(http.Connection):
         self._read_chunk_call = read_chunk_call
 
     @override
-    def create_mutex(self: Self) -> AbstractAsyncContextManager[None]:
+    def create_mutex(self) -> AbstractAsyncContextManager[None]:
         return asyncio.Lock()
 
     @override
-    async def read_chunk(self: Self) -> bytes:
+    async def read_chunk(self) -> bytes:
         ret = self._read_chunk_call()
         assert isinstance(ret, bytes)
         return ret
 
     @override
-    async def write_chunk(self: Self, _data: bytes, _drain: bool) -> None:
+    async def write_chunk(self, _data: bytes, _drain: bool) -> None:
         raise NotImplementedError
 
 

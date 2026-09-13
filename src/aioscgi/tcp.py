@@ -1,7 +1,5 @@
 """Handling of TCP endpoint addresses."""
 
-from typing import Self
-
 
 class TCPAddress:
     """A TCP endpoint address that can be used for connecting or listening."""
@@ -14,7 +12,7 @@ class TCPAddress:
     host: str
     port: str
 
-    def __init__(self: Self, combined: str) -> None:
+    def __init__(self, combined: str) -> None:
         """
         Parse a TCP listening address into host and port parts.
 

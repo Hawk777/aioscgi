@@ -2,7 +2,7 @@
 
 import abc
 from collections.abc import Awaitable, Callable
-from typing import Any, Self
+from typing import Any
 
 EventOrScopeValue = bytes | str | int | float | list[Any] | dict[str, Any] | bool | None
 """The legal types of values in event or scope dictionaries."""
@@ -29,7 +29,7 @@ class StartStopListener(abc.ABC):
     __slots__ = ()
 
     @abc.abstractmethod
-    def started(self: Self) -> None:
+    def started(self) -> None:
         """
         Notify that the server has started.
 
@@ -38,7 +38,7 @@ class StartStopListener(abc.ABC):
         """
 
     @abc.abstractmethod
-    def stopping(self: Self) -> None:
+    def stopping(self) -> None:
         """
         Notify that the server is beginning to shut down.
 

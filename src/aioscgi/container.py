@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Self
+from typing import Any
 
 from .types import ApplicationType
 
@@ -25,11 +25,7 @@ class Container:
     base_uri: str | None
     state: dict[Any, Any]
 
-    def __init__(
-        self: Self,
-        application: ApplicationType,
-        base_uri: str | None,
-    ) -> None:
+    def __init__(self, application: ApplicationType, base_uri: str | None) -> None:
         """
         Construct a new ASGI container.
 

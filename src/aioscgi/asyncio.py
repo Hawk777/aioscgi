@@ -74,21 +74,22 @@ class _ConnectionHandler:
     """
 
     __slots__ = {
-        "_connection_tasks": "All running connection-handling tasks.",
         "_container": "The ASGI container.",
+        "_group": "The task group in which to place connection-handling tasks.",
     }
 
-    _connection_tasks: set[asyncio.Task[None]]
     _container: Container
+    _group: asyncio.TaskGroup
 
-    def __init__(self: Self, container: Container) -> None:
+    def __init__(self: Self, container: Container, group: asyncio.TaskGroup) -> None:
         """
         Construct a new _ConnectionHandler.
 
         :param container: The ASGI container.
+        :param group: The task group in which to place connection-handling tasks.
         """
-        self._connection_tasks = set()
         self._container = container
+        self._group = group
 
     def handle_connection(
         self: Self,
@@ -101,8 +102,7 @@ class _ConnectionHandler:
         :param reader: The read half of the connection.
         :param writer: The write half of the connection.
         """
-        task = asyncio.create_task(self._handle_connection_async(reader, writer))
-        self._connection_tasks.add(task)
+        self._group.create_task(self._handle_connection_async(reader, writer))
 
     async def _handle_connection_async(
         self: Self,
@@ -116,21 +116,40 @@ class _ConnectionHandler:
         :param writer: The write half of the connection.
         """
         try:
-            try:
-                return await Connection(self._container, reader, writer).run()
-            finally:
-                writer.close()
-                with contextlib.suppress(BrokenPipeError, ConnectionResetError):
-                    await writer.wait_closed()
+            return await Connection(self._container, reader, writer).run()
         finally:
-            task = asyncio.current_task()
-            assert task is not None
-            self._connection_tasks.remove(task)
+            writer.close()
+            with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+                await writer.wait_closed()
 
-    async def wait_finished(self: Self) -> None:
-        """Wait until all connection tasks have completed."""
-        while self._connection_tasks:
-            await next(iter(self._connection_tasks))
+
+class _LifespanStartError(Exception):
+    """The application reported a startup error via the lifespan protocol."""
+
+
+class _LifespanStopError(Exception):
+    """The application reported a shutdown error via the lifespan protocol."""
+
+
+def _complete_lifespan_future(
+    fut: asyncio.Future[None],
+    typ: type[Exception],
+    error: str | None,
+) -> None:
+    """
+    Complete a future used for monitoring progress of the lifespan protocol.
+
+    If :param error: is not None, :param fut: will be completed with an exception.
+    Otherwise, it will be completed successfully.
+
+    :param fut: The future to complete.
+    :param typ: The type of exception to complete :param fut: with on error.
+    :param error: The error message, if an error occurred.
+    """
+    if error is not None:
+        fut.set_exception(typ(error))
+    else:
+        fut.set_result(None)
 
 
 async def _main_coroutine(
@@ -149,111 +168,54 @@ async def _main_coroutine(
     :param container: The ASGI container to use.
     :param listener: The start/stop listener to notify of startup/shutdown.
     """
-    # Get the event loop.
+    # Create the termination event and hook up the signal handlers, if signals are
+    # supported.
     loop = asyncio.get_event_loop()
-
-    # Create a future and arrange for it to be completed whenever SIGINT or SIGTERM is
-    # received, if on a platform supporting signals. On other platforms, just create the
-    # future but don’t ever set it, which causes an endless wait and non-graceful
-    # termination.
-    term_sig = loop.create_future()
+    term_event = asyncio.Event()
     if hasattr(loop, "add_signal_handler"):
-
-        def signal_handler(signal_name: str) -> None:
-            """Handle a signal."""
-            # InvalidStateError is raised if the future has already completed, which it
-            # might have if two signals are received.
-            with contextlib.suppress(asyncio.InvalidStateError):
-                term_sig.set_result(signal_name)
-
         for signal_name in ("SIGINT", "SIGTERM"):
-            if hasattr(signal, signal_name):
-                loop.add_signal_handler(
-                    getattr(signal, signal_name),
-                    functools.partial(signal_handler, signal_name),
-                )
-
-    # Start up the lifespan protocol.
-    lifespan_started = loop.create_future()
-    lifespan_shutting_down = loop.create_future()
-    lifespan_shutdown_complete = loop.create_future()
-    lifespan_manager = lifespan.Manager(
-        container,
-        loop.create_future(),
-        asyncio.Lock(),
-        lifespan_started.set_result,
-        lifespan_shutting_down,
-        lifespan_shutdown_complete.set_result,
-    )
-    lifespan_future = asyncio.create_task(lifespan_manager.run())
+            signal_number = getattr(signal, signal_name, None)
+            if signal_number is not None:
+                loop.add_signal_handler(signal_number, term_event.set)
 
     try:
-        # Wait for the application to start.
-        startup_error = await lifespan_started
-        if startup_error is not None:
-            logging.getLogger(__name__).error(
-                "Application startup failed: %s",
-                startup_error,
-            )
-            return
-
-        try:
-            # Create a connection handler.
-            connection_handler = _ConnectionHandler(container)
-
-            # Start the server.
-            servers = await start_server_fn(connection_handler.handle_connection)
-            logging.getLogger(__name__).info("Server up and running")
-
-            # Notify the listener.
-            listener.started()
-
-            # Wait until requested to terminate.
-            signal_name = await term_sig
-            logging.getLogger(__name__).info(
-                "Caught termination signal %s",
-                signal_name,
-            )
-
-            # Notify the listener.
-            listener.stopping()
-
-            # Close the listening sockets.
-            for server in servers:
-                server.close()
-            logging.getLogger(__name__).info("Server no longer listening")
-
-            # Wait until all the client connections finish. Each time a task finishes,
-            # it removes itself from the set, and we want to wait until they are all
-            # gone, so just wait for an arbitrary task over and over until the set is
-            # empty.
-            #
-            # In some versions of Python, wait_closed theoretically waits until the
-            # closure of the listening socket is complete, but in practice doesn’t
-            # actually do anything because the listening socket is closed synchronously.
-            # In other versions of Python, wait_closed does that and also waits until
-            # all accepted connections have been completed as well. Either way, it’s
-            # reasonable to call it and to consider it part of waiting for closure of
-            # existing connections.
-            for server in servers:
-                await server.wait_closed()
-            await connection_handler.wait_finished()
-            logging.getLogger(__name__).info("All client connections closed")
-        finally:
-            # Shut down the application.
-            lifespan_shutting_down.set_result(None)
-            shutdown_error = await lifespan_shutdown_complete
-            if shutdown_error is not None:
-                logging.getLogger(__name__).error(
-                    "Application shutdown failed: %s",
-                    shutdown_error,
-                )
-            await lifespan_future
+        # Run the server.
+        await _main_coroutine_with_events(
+            start_server_fn,
+            container,
+            listener,
+            term_event,
+        )
+    # If a lifespan error occurred, print it, but in its basic form, without a
+    # traceback, because the traceback won’t show anything useful.
+    except* _LifespanStartError as exp_group:
+        # ruff: ignore[TRY400]
+        logging.getLogger(__name__).error(
+            "Application failed to initialize: %s",
+            exp_group.exceptions[0],
+        )
+    except* _LifespanStopError as exp_group:
+        # ruff: ignore[TRY400]
+        logging.getLogger(__name__).error(
+            "Application failed to shut down: %s",
+            exp_group.exceptions[0],
+        )
     finally:
         # Cancel all the running tasks except myself, thus allowing them to clean up
-        # properly.
-        logging.getLogger(__name__).debug("Terminating running tasks")
+        # properly. In a well-written application there shouldn’t be any (the lifetime
+        # protocol should have shut them down), but a poorly written application might
+        # have left some background tasks running which would otherwise prevent us from
+        # shutting down.
         all_tasks = asyncio.all_tasks(loop)
+        if len(all_tasks) > 1:  # If it’s just one, it’s ourself!
+            logging.getLogger(__name__).warning(
+                (
+                    "%d background task(s) still running after shutdown. They will be "
+                    "cancelled. You should use the lifespan protocol to cleanly shut "
+                    "them down instead."
+                ),
+                len(all_tasks),
+            )
         for i in all_tasks:
             if not i.done() and i != asyncio.current_task():
                 i.cancel()
@@ -268,6 +230,126 @@ async def _main_coroutine(
                     logging.getLogger(__name__).exception(
                         "Uncaught exception while cancelling task",
                     )
+
+
+async def _main_coroutine_with_events(
+    start_server_fn: Callable[
+        [Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]],
+        Awaitable[list[asyncio.Server]],
+    ],
+    container: Container,
+    listener: StartStopListener,
+    term_event: asyncio.Event,
+) -> None:
+    """
+    Run the application in an asyncio event loop with a termination event.
+
+    :param start_server_fn: A function which accepts a connection handler and starts and
+        returns one or more servers.
+    :param container: The ASGI container to use.
+    :param listener: The start/stop listener to notify of startup/shutdown.
+    :param term_event: An event that is set when the server should shut down.
+
+    :raise _LifespanStartError: If the application fails to initialize.
+    :raise _LifespanStopError: If the application fails to shut down.
+    """
+    async with asyncio.TaskGroup() as lifespan_tg:
+        # Start up the lifespan protocol.
+        loop = asyncio.get_event_loop()
+        lifespan_started = loop.create_future()
+        lifespan_shutting_down = loop.create_future()
+        lifespan_shutdown_complete = loop.create_future()
+        lifespan_manager = lifespan.Manager(
+            container,
+            loop.create_future(),
+            asyncio.Lock(),
+            functools.partial(
+                _complete_lifespan_future,
+                lifespan_started,
+                _LifespanStartError,
+            ),
+            lifespan_shutting_down,
+            functools.partial(
+                _complete_lifespan_future,
+                lifespan_shutdown_complete,
+                _LifespanStopError,
+            ),
+        )
+        lifespan_tg.create_task(lifespan_manager.run())
+
+        # Wait for the application to start. If startup fails, this will raise
+        # _LifespanStartError.
+        await lifespan_started
+
+        try:
+            # Run the rest of the server.
+            await _main_coroutine_with_lifespan(
+                start_server_fn,
+                container,
+                listener,
+                term_event,
+            )
+        finally:
+            # Shut down the application. If shutdown fails, this will raise
+            # _LifespanStopError.
+            lifespan_shutting_down.set_result(None)
+            await lifespan_shutdown_complete
+
+
+async def _main_coroutine_with_lifespan(
+    start_server_fn: Callable[
+        [Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]],
+        Awaitable[list[asyncio.Server]],
+    ],
+    container: Container,
+    listener: StartStopListener,
+    term_event: asyncio.Event,
+) -> None:
+    """
+    Run the application in an asyncio event loop within lifespan protocol handling.
+
+    :param start_server_fn: A function which accepts a connection handler and starts and
+        returns one or more servers.
+    :param container: The ASGI container to use.
+    :param listener: The start/stop listener to notify of startup/shutdown.
+    :param term_event: An event that is set when the server should shut down.
+    """
+    # Create a task group and connection handler.
+    async with asyncio.TaskGroup() as connection_tg:
+        connection_handler = _ConnectionHandler(container, connection_tg)
+
+        # Start the server.
+        servers = await start_server_fn(connection_handler.handle_connection)
+        logging.getLogger(__name__).info("Server up and running")
+
+        # Notify the listener.
+        listener.started()
+
+        # Wait until requested to terminate.
+        await term_event.wait()
+        logging.getLogger(__name__).info("Caught termination signal")
+
+        # Notify the listener.
+        listener.stopping()
+
+        # Close the listening sockets.
+        for server in servers:
+            server.close()
+        logging.getLogger(__name__).info("Server no longer listening")
+
+        # Wait until all the client connections finish. Each time a task finishes, it
+        # removes itself from the set, and we want to wait until they are all gone, so
+        # just wait for an arbitrary task over and over until the set is empty.
+        #
+        # In some versions of Python, wait_closed theoretically waits until the closure
+        # of the listening socket is complete, but in practice doesn’t actually do
+        # anything because the listening socket is closed synchronously. In other
+        # versions of Python, wait_closed does that and also waits until all accepted
+        # connections have been completed as well. Either way, it’s reasonable to call
+        # it and to consider it part of waiting for closure of existing connections.
+        for server in servers:
+            await server.wait_closed()
+    logging.getLogger(__name__).info("All client connections closed")
 
 
 async def _start_servers_gen(

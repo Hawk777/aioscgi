@@ -10,6 +10,7 @@ import os
 import pathlib
 import socket
 import sys
+import tomllib
 from collections.abc import Iterable
 from typing import override
 
@@ -181,8 +182,8 @@ def main() -> None:
             "-l",
             type=pathlib.Path,
             help=(
-                "the JSON file containing a logging configuration dictionary per "
-                "logging.config.dictConfig (default: none)"
+                "the JSON or TOML file containing a logging configuration dictionary "
+                "per logging.config.dictConfig (default: none)"
             ),
         )
         logging_group.add_argument(
@@ -227,7 +228,15 @@ def main() -> None:
         # Set up logging.
         if args.logging is not None:
             with args.logging.open("rb") as logging_config_file:
-                cfg = json.load(logging_config_file)
+                try:
+                    cfg = json.load(logging_config_file)
+                except json.JSONDecodeError as json_exp:
+                    logging_config_file.seek(0)
+                    try:
+                        cfg = tomllib.load(logging_config_file)
+                    except tomllib.TOMLDecodeError as toml_exp:
+                        msg = f"Error parsing {args.logging}"
+                        raise ExceptionGroup(msg, [json_exp, toml_exp]) from None
             logging.config.dictConfig(cfg)
         else:
             logging.basicConfig(level=getattr(logging, args.log_level.upper()))

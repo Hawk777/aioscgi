@@ -131,6 +131,16 @@ class _LifespanStopError(Exception):
     """The application reported a shutdown error via the lifespan protocol."""
 
 
+class _QuitError(Exception):
+    """A fast-shutdown event was received."""
+
+    @staticmethod
+    async def raise_on_event(e: asyncio.Event) -> None:
+        """Wait for an event to be signalled, then raise _QuitError."""
+        await e.wait()
+        raise _QuitError
+
+
 def _complete_lifespan_future(
     fut: asyncio.Future[None],
     typ: type[Exception],
@@ -150,6 +160,17 @@ def _complete_lifespan_future(
         fut.set_exception(typ(error))
     else:
         fut.set_result(None)
+
+
+def _set_two_events(e1: asyncio.Event, e2: asyncio.Event) -> None:
+    """
+    Set two event objects to signalled.
+
+    :param e1: The first event.
+    :param e2: The second event.
+    """
+    e1.set()
+    e2.set()
 
 
 async def _main_coroutine(
@@ -172,11 +193,20 @@ async def _main_coroutine(
     # supported.
     loop = asyncio.get_event_loop()
     term_event = asyncio.Event()
+    quit_event = asyncio.Event()
     if hasattr(loop, "add_signal_handler"):
         for signal_name in ("SIGINT", "SIGTERM"):
             signal_number = getattr(signal, signal_name, None)
             if signal_number is not None:
                 loop.add_signal_handler(signal_number, term_event.set)
+        signal_number = getattr(signal, "SIGQUIT", None)
+        if signal_number is not None:
+            loop.add_signal_handler(
+                signal_number,
+                _set_two_events,
+                term_event,
+                quit_event,
+            )
 
     try:
         # Run the server.
@@ -185,6 +215,7 @@ async def _main_coroutine(
             container,
             listener,
             term_event,
+            quit_event,
         )
     # If a lifespan error occurred, print it, but in its basic form, without a
     # traceback, because the traceback won’t show anything useful.
@@ -240,6 +271,7 @@ async def _main_coroutine_with_events(
     container: Container,
     listener: StartStopListener,
     term_event: asyncio.Event,
+    quit_event: asyncio.Event,
 ) -> None:
     """
     Run the application in an asyncio event loop with a termination event.
@@ -249,6 +281,7 @@ async def _main_coroutine_with_events(
     :param container: The ASGI container to use.
     :param listener: The start/stop listener to notify of startup/shutdown.
     :param term_event: An event that is set when the server should shut down.
+    :param quit_event: An event that is set when the server should shut down fast.
 
     :raise _LifespanStartError: If the application fails to initialize.
     :raise _LifespanStopError: If the application fails to shut down.
@@ -288,6 +321,7 @@ async def _main_coroutine_with_events(
                 container,
                 listener,
                 term_event,
+                quit_event,
             )
         finally:
             # Shut down the application. If shutdown fails, this will raise
@@ -304,6 +338,7 @@ async def _main_coroutine_with_lifespan(
     container: Container,
     listener: StartStopListener,
     term_event: asyncio.Event,
+    quit_event: asyncio.Event,
 ) -> None:
     """
     Run the application in an asyncio event loop within lifespan protocol handling.
@@ -313,42 +348,63 @@ async def _main_coroutine_with_lifespan(
     :param container: The ASGI container to use.
     :param listener: The start/stop listener to notify of startup/shutdown.
     :param term_event: An event that is set when the server should shut down.
+    :param quit_event: An event that is set when the server should shut down fast.
     """
-    # Create a task group and connection handler.
-    async with asyncio.TaskGroup() as connection_tg:
-        connection_handler = _ConnectionHandler(container, connection_tg)
+    # We use _QuitError only to break through connection_tg. We don’t want it to
+    # propagate further out.
+    with contextlib.suppress(_QuitError):
+        # Create a task group to hold the quit monitor, when created.
+        async with asyncio.TaskGroup() as quit_monitor_tg:
+            # Create a task group to hold the connection handling tasks.
+            async with asyncio.TaskGroup() as connection_tg:
+                # Create a connection handler.
+                connection_handler = _ConnectionHandler(container, connection_tg)
 
-        # Start the server.
-        servers = await start_server_fn(connection_handler.handle_connection)
-        logging.getLogger(__name__).info("Server up and running")
+                # Start the server.
+                servers = await start_server_fn(connection_handler.handle_connection)
+                logging.getLogger(__name__).info("Server up and running")
 
-        # Notify the listener.
-        listener.started()
+                # Notify the listener.
+                listener.started()
 
-        # Wait until requested to terminate.
-        await term_event.wait()
-        logging.getLogger(__name__).info("Caught termination signal")
+                # Wait until requested to terminate.
+                await term_event.wait()
+                logging.getLogger(__name__).info("Caught termination signal")
 
-        # Notify the listener.
-        listener.stopping()
+                # Notify the listener.
+                listener.stopping()
 
-        # Close the listening sockets.
-        for server in servers:
-            server.close()
-        logging.getLogger(__name__).info("Server no longer listening")
+                # Close the listening sockets.
+                for server in servers:
+                    server.close()
+                logging.getLogger(__name__).info("Server no longer listening")
 
-        # Wait until all the client connections finish. Each time a task finishes, it
-        # removes itself from the set, and we want to wait until they are all gone, so
-        # just wait for an arbitrary task over and over until the set is empty.
-        #
-        # In some versions of Python, wait_closed theoretically waits until the closure
-        # of the listening socket is complete, but in practice doesn’t actually do
-        # anything because the listening socket is closed synchronously. In other
-        # versions of Python, wait_closed does that and also waits until all accepted
-        # connections have been completed as well. Either way, it’s reasonable to call
-        # it and to consider it part of waiting for closure of existing connections.
-        for server in servers:
-            await server.wait_closed()
+                # While waiting for client connections to finish, we must stop waiting
+                # and cancel them if a fast shutdown is requested. Spawn a task that
+                # will do that.
+                quit_monitor = quit_monitor_tg.create_task(
+                    _QuitError.raise_on_event(
+                        quit_event,
+                    ),
+                )
+
+                # Wait until all the client connections finish. Each time a task
+                # finishes, it removes itself from the set, and we want to wait until
+                # they are all gone, so just wait for an arbitrary task over and over
+                # until the set is empty.
+                #
+                # In some versions of Python, wait_closed theoretically waits until the
+                # closure of the listening socket is complete, but in practice doesn’t
+                # actually do anything because the listening socket is closed
+                # synchronously. In other versions of Python, wait_closed does that and
+                # also waits until all accepted connections have been completed as well.
+                # Either way, it’s reasonable to call it and to consider it part of
+                # waiting for closure of existing connections.
+                for server in servers:
+                    await server.wait_closed()
+            # Now that all client connections are finished, we don’t need the quit
+            # monitor task any more.
+            quit_monitor.cancel()
     logging.getLogger(__name__).info("All client connections closed")
 
 

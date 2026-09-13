@@ -431,7 +431,8 @@ async def _start_servers_gen(
     # Python 3.13 added the cleanup_socket parameter to create_unix_server (and, albeit
     # undocumented, therefore to start_unix_server as well), and defaulted it to True,
     # which is bad for sockets passed in from an outside source.
-    if sys.hexversion >= 0x030D00F0:
+    python_313 = 0x030D00F0
+    if sys.hexversion >= python_313:
 
         async def start_unix_server_from_socket(sock: socket.socket) -> asyncio.Server:
             return await asyncio.start_unix_server(

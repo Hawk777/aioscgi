@@ -52,3 +52,38 @@ aioscgi implements a non-standard extension in the `http` scope named
 `bytes` values containing the entire CGI environment, exactly as sent by the
 SCGI client. This can be used to extract values that the ASGI specification
 does not provide a home for.
+
+
+# How does it connect to the rest of my system?
+
+## Listening
+
+aioscgi can listen on one or more TCP or UNIX-domain sockets. It can also use listening
+TCP or UNIX-domain sockets given to it via systemd socket passing. It can listen on
+multiple sockets, including sockets of different domains and/or a mixture of created
+sockets and passed sockets, at the same time.
+
+## Startup notification
+
+aioscgi supports the systemd service status notification protocol and therefore can be
+invoked as a service with `Type=notify`. It reports startup complete (`READY=1`) after
+the application’s lifespan protocol startup process (if any) is complete and any
+listening sockets created by aioscgi itself have been created. It reports shutdown in
+progress (`STOPPING=1`) as soon as it is instructed to begin shutting down.
+
+## Control
+
+On a UNIX system, aioscgi handles three signals:
+* When aioscgi receives `SIGINT`, it immediately stops accepting new connections on any
+  listening socket. It then waits for all existing tasks that were spawned to handle
+  client connections to end naturally before performing lifespan protocol shutdown and
+  terminating. Further `SIGINT`s after the first are ignored.
+* When aioscgi receives `SIGTERM`, it behaves exactly the same as `SIGINT`.
+* When aioscgi receives `SIGQUIT`, it does everything described for `SIGINT`, except
+  that it also raises a cancellation exception in every task that was spawned to handle
+  a client connection with the intention of making them stop faster. `SIGQUIT` can also
+  be sent after `SIGINT` or `SIGTERM`, in which case the cancellation exception is
+  raised in any still-running client-connection-handling tasks. Further `SIGQUIT`s after
+  the first are ignored. Even though `SIGQUIT` cancels client-connection-handling tasks,
+  the application’s lifespan protocol task (if any) is not cancelled and the normal
+  lifespan shutdown process still occurs.

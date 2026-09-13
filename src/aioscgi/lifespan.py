@@ -10,8 +10,16 @@ from typing import Any
 from .container import Container
 from .types import ApplicationType, EventOrScope, ReceiveFunction, SendFunction
 
+type _WrappedApplicationType = Callable[
+    [EventOrScope, ReceiveFunction, SendFunction],
+    Awaitable[None],
+]
 
-def _wrapper(application: ApplicationType, never: Awaitable[None]) -> ApplicationType:
+
+def _wrapper(
+    application: ApplicationType,
+    never: Awaitable[None],
+) -> _WrappedApplicationType:
     """
     Wrap the application callable for the lifespan protocol and deal with exceptions.
 
@@ -147,7 +155,7 @@ class Manager:
     }
 
     _container: Container
-    _wrapped_application: ApplicationType
+    _wrapped_application: _WrappedApplicationType
     _never: Awaitable[None]
     _started: Callable[[str | None], None]
     _started_called: bool
@@ -196,7 +204,7 @@ class Manager:
         self._receive_mutex = mutex
         self._receive_iter = self._receive_gen()
 
-    async def run(self) -> Any:
+    async def run(self) -> None:
         """
         Run the lifespan protocol.
 

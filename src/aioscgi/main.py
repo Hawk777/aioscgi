@@ -247,14 +247,15 @@ def main() -> None:
 
         # Import the application module and find the callable.
         sys.path.insert(0, ".")
-        app_parts = args.application.split(":")
-        if len(app_parts) != 2:
+        try:
+            (app_module_name, app_callable_name) = args.application.split(":")
+        except ValueError:
             parser.error(
                 "Application callable must be module name, colon, and callable name.",
             )
-        app_module = importlib.import_module(app_parts[0])
+        app_module = importlib.import_module(app_module_name)
         app_callable = None
-        for part in app_parts[1].split("."):
+        for part in app_callable_name.split("."):
             app_callable = getattr(
                 app_callable if app_callable is not None else app_module,
                 part,

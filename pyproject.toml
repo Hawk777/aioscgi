@@ -81,4 +81,4 @@ ignore = [
 select = ["ALL"]
 
 [tool.uv.build-backend]
-source-include = ["CHANGELOG.rst"]
+source-include = ["CHANGELOG.rst", "tests/**"]

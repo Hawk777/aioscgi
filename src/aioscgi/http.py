@@ -68,9 +68,9 @@ def _calc_http_headers(environ: dict[str, bytes]) -> list[list[bytes]]:
         for k, v in environ.items()
         if (
             k.startswith("HTTP_")
-            and k not in ("HTTP_CONTENT_LENGTH", "HTTP_CONTENT_TYPE")
+            and k not in {"HTTP_CONTENT_LENGTH", "HTTP_CONTENT_TYPE"}
         )
-        or k in ("CONTENT_LENGTH", "CONTENT_TYPE")
+        or k in {"CONTENT_LENGTH", "CONTENT_TYPE"}
     ]
 
 

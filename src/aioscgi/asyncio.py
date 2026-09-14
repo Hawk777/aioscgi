@@ -117,6 +117,10 @@ class _ConnectionHandler:
         """
         try:
             return await Connection(self._container, reader, writer).run()
+        # We don’t want to crash the whole server, and the exception is being logged.
+        # pylint: disable-next=broad-exception-caught
+        except Exception:
+            logging.getLogger(__name__).exception("Unhandled exception in application")
         finally:
             writer.close()
             with contextlib.suppress(BrokenPipeError, ConnectionResetError):

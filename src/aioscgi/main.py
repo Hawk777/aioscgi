@@ -179,6 +179,14 @@ def make_arg_parser(io_adapters: Collection[str]) -> argparse.ArgumentParser:
             "root_path and path (default: use SCRIPT_NAME and PATH_INFO instead)"
         ),
     )
+    group.add_argument(
+        "--x-sendfile",
+        action="store_true",
+        help=(
+            "enable the Path Send extension (http.response.pathsend) using the "
+            "X-Sendfile response header"
+        ),
+    )
     group = parser.add_argument_group(
         "logging options",
         "options to control the Python logging framework configuration",
@@ -301,7 +309,7 @@ def main() -> None:
 
         # Run the server.
         start_stop_listener = make_start_stop_listener(args.systemd)
-        container = Container(app_callable, args.base_uri)
+        container = Container(app_callable, args.base_uri, x_sendfile=args.x_sendfile)
         adapter.run(
             args.tcp,
             args.unix_socket,

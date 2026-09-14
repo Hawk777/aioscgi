@@ -58,6 +58,14 @@ aioscgi implements a non-standard extension in the `http` scope named
 SCGI client. This can be used to extract values that the ASGI specification
 does not provide a home for.
 
+## http.response.pathsend
+
+aioscgi implements [the HTTP Path Send
+extension](https://asgi.readthedocs.io/en/stable/extensions.html#path-send)
+using the `X-Sendfile` header. Because it is not possible to automatically
+detect whether a given HTTP server understands that header or not, support is
+disabled by default and must be enabled with a command-line option.
+
 
 # How does it connect to the rest of my system?
 

@@ -130,6 +130,7 @@ def run_test(
     extra_reader_calls: list[_Call] | None = None,
     read_returns_eof: bool = False,
     scheme: str = "http",
+    x_sendfile: bool = False,
 ) -> None:
     """
     Run a specific application while mocking sioscgi.
@@ -156,6 +157,7 @@ def run_test(
         bytes), or False if Connection.read_chunk should raise NotImplementedError (it
         is not expected to be called at all).
     :param scheme: The scheme that the app should see in the scope.
+    :param x_sendfile: Whether to enable X-Sendfile in the container.
     """
 
     async def app(
@@ -182,6 +184,10 @@ def run_test(
         assert isinstance(extensions, dict)
         environ: dict[str, bytes] = extensions["environ"]
         assert environ == expected_environ
+        if x_sendfile:
+            assert extensions["http.response.pathsend"] == {}
+        else:
+            assert "http.response.pathsend" not in extensions
 
         for expected_message in expected_messages:
             actual_message = await receive()
@@ -199,7 +205,7 @@ def run_test(
         writer = writer_class.return_value
         reader.next_event.side_effect = read_events
         writer.send.return_value = b""
-        container = Container(app, None)
+        container = Container(app, None, x_sendfile=x_sendfile)
         read_chunk = reader.read_chunk
         if read_returns_eof:
             read_chunk.return_value = b""
@@ -445,4 +451,52 @@ def test_https() -> None:
             {"type": "http.response.body", "body": b"Hello World!"},
         ],
         scheme="https",
+    )
+
+
+def test_x_sendfile() -> None:
+    """Test the use of the pathsend extension via the X-Sendfile header."""
+    run_test(
+        [
+            sioscgi.request.Headers(
+                {
+                    "SERVER_PROTOCOL": b"HTTP/1.1",
+                    "REQUEST_METHOD": b"GET",
+                    "QUERY_STRING": b"",
+                    "SCRIPT_NAME": b"",
+                    "SERVER_NAME": b"localhost",
+                    "SERVER_PORT": b"80",
+                },
+            ),
+            sioscgi.request.End(),
+        ],
+        [
+            sioscgi.response.Headers(
+                "200 OK",
+                [
+                    ("Content-Type", "text/plain; charset=UTF-8"),
+                    ("X-Sendfile", "%2Ffoo%2Fbar%2Fbaz.txt"),
+                ],
+            ),
+            sioscgi.response.End(),
+        ],
+        [],
+        {
+            "SERVER_PROTOCOL": b"HTTP/1.1",
+            "REQUEST_METHOD": b"GET",
+            "QUERY_STRING": b"",
+            "SCRIPT_NAME": b"",
+            "SERVER_NAME": b"localhost",
+            "SERVER_PORT": b"80",
+        },
+        [{"type": "http.request"}],
+        [
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"text/plain; charset=UTF-8")],
+            },
+            {"type": "http.response.pathsend", "path": "/foo/bar/baz.txt"},
+        ],
+        x_sendfile=True,
     )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import abc
 import http
 import logging
+import urllib.parse
 import wsgiref.util
 from collections.abc import Mapping
 from contextlib import AbstractAsyncContextManager
@@ -213,6 +214,7 @@ def _make_scope(
         "server": [server_name_str, int(environ["SERVER_PORT"])],
         "extensions": {
             "environ": environ,
+            **({"http.response.pathsend": {}} if container.x_sendfile else {}),
         },
         "state": container.state,
     }
@@ -436,6 +438,27 @@ class Connection(abc.ABC):
                     await self._send_event(sioscgi.response.Body(body), drain=more)
                 if not more:
                     await self._send_event(sioscgi.response.End(), drain=True)
+            elif event_type == "http.response.pathsend":
+                if not self._container.x_sendfile:
+                    msg = (
+                        "Event type http.response.pathsend passed to send, but that "
+                        "extension is not enabled"
+                    )
+                    raise ValueError(msg)
+                path = event["path"]
+                assert isinstance(path, str)
+                if self._writer_pending_headers is None:
+                    msg = (
+                        "Event type http.response.pathsend passed to send without "
+                        "previous http.response.start, or with previous "
+                        "http.response.body"
+                    )
+                    raise ValueError(msg)
+                old_headers = self._writer_pending_headers
+                self._writer_pending_headers = None
+                old_headers.other_headers["X-Sendfile"] = urllib.parse.quote(path, "")
+                await self._send_event(old_headers, drain=False)
+                await self._send_event(sioscgi.response.End(), drain=True)
             else:
                 msg = f"Unknown event type {event_type!r} passed to send"
                 raise ValueError(msg)

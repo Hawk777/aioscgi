@@ -162,13 +162,20 @@ def main() -> None:
         parser = argparse.ArgumentParser(
             description="Run an ASGI application under asyncio.",
         )
-        parser.add_argument(
+        group = parser.add_argument_group(
+            "behaviour options",
+            (
+                "options to control the internal behaviour of %(prog)s and enabling of "
+                "optional features"
+            ),
+        )
+        group.add_argument(
             "--adapter",
             default="asyncio",
             choices=io_adapters,
             help="the I/O adapter to use (default: asyncio)",
         )
-        parser.add_argument(
+        group.add_argument(
             "--base-uri",
             type=str,
             help=(
@@ -176,8 +183,12 @@ def main() -> None:
                 "root_path and path (default: use SCRIPT_NAME and PATH_INFO instead)"
             ),
         )
-        logging_group = parser.add_mutually_exclusive_group()
-        logging_group.add_argument(
+        group = parser.add_argument_group(
+            "logging options",
+            "options to control the Python logging framework configuration",
+        )
+        group = group.add_mutually_exclusive_group()
+        group.add_argument(
             "--logging",
             "-l",
             type=pathlib.Path,
@@ -186,14 +197,21 @@ def main() -> None:
                 "per logging.config.dictConfig (default: none)"
             ),
         )
-        logging_group.add_argument(
+        group.add_argument(
             "--log-level",
             default="info",
             choices=["debug", "info", "warning", "error", "critical"],
             help="the level of log messages to show (default: %(default)s)",
             metavar="level",
         )
-        parser.add_argument(
+        group = parser.add_argument_group(
+            "integration options",
+            (
+                "options to control where %(prog)s listens for connections and how it "
+                "integrates with system service management, etc."
+            ),
+        )
+        group.add_argument(
             "--unix-socket",
             "-u",
             action="append",
@@ -201,7 +219,7 @@ def main() -> None:
             type=pathlib.Path,
             help="the UNIX socket path to listen on",
         )
-        parser.add_argument(
+        group.add_argument(
             "--tcp",
             "-t",
             action="append",
@@ -210,7 +228,7 @@ def main() -> None:
             help="the TCP address/port to listen on",
             metavar="IPv4ADDR:PORT | [IPv6ADDR]:PORT | HOSTNAME:PORT",
         )
-        parser.add_argument(
+        group.add_argument(
             "--systemd",
             action="store_true",
             help="enable systemd integration (startup notification, socket passing)",

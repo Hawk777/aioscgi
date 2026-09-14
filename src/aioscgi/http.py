@@ -312,7 +312,11 @@ class Connection(abc.ABC):
         # Receive the request line and headers from the SCGI client.
         environ: dict[str, bytes] | None = None
         while environ is None:
-            event = self._reader.next_event()
+            try:
+                event = self._reader.next_event()
+            except sioscgi.request.Error:
+                logging.getLogger(__name__).exception("SCGI remote protocol error")
+                return
             if event is None:
                 chunk = await self._read_chunk_wrapper()
                 if chunk:

@@ -11,7 +11,7 @@ import pathlib
 import socket
 import sys
 import tomllib
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from typing import override
 
 from .container import Container
@@ -149,6 +149,93 @@ def find_extra_sockets(systemd: bool) -> Iterable[socket.socket]:
     return socks
 
 
+def make_arg_parser(io_adapters: Collection[str]) -> argparse.ArgumentParser:
+    """
+    Create the command line argument parser.
+
+    :param io_adapters: The possible choices of I/O adapters.
+    """
+    parser = argparse.ArgumentParser(
+        description="Run an ASGI application under asyncio.",
+    )
+    group = parser.add_argument_group(
+        "behaviour options",
+        (
+            "options to control the internal behaviour of %(prog)s and enabling of "
+            "optional features"
+        ),
+    )
+    group.add_argument(
+        "--adapter",
+        default="asyncio",
+        choices=io_adapters,
+        help="the I/O adapter to use (default: asyncio)",
+    )
+    group.add_argument(
+        "--base-uri",
+        type=str,
+        help=(
+            "the request URI prefix to the base of the application for computing "
+            "root_path and path (default: use SCRIPT_NAME and PATH_INFO instead)"
+        ),
+    )
+    group = parser.add_argument_group(
+        "logging options",
+        "options to control the Python logging framework configuration",
+    )
+    group = group.add_mutually_exclusive_group()
+    group.add_argument(
+        "--logging",
+        "-l",
+        type=pathlib.Path,
+        help=(
+            "the JSON or TOML file containing a logging configuration dictionary per "
+            "logging.config.dictConfig (default: none)"
+        ),
+    )
+    group.add_argument(
+        "--log-level",
+        default="info",
+        choices=["debug", "info", "warning", "error", "critical"],
+        help="the level of log messages to show (default: %(default)s)",
+        metavar="level",
+    )
+    group = parser.add_argument_group(
+        "integration options",
+        (
+            "options to control where %(prog)s listens for connections and how it "
+            "integrates with system service management, etc."
+        ),
+    )
+    group.add_argument(
+        "--unix-socket",
+        "-u",
+        action="append",
+        default=[],
+        type=pathlib.Path,
+        help="the UNIX socket path to listen on",
+    )
+    group.add_argument(
+        "--tcp",
+        "-t",
+        action="append",
+        default=[],
+        type=TCPAddress,
+        help="the TCP address/port to listen on",
+        metavar="IPv4ADDR:PORT | [IPv6ADDR]:PORT | HOSTNAME:PORT",
+    )
+    group.add_argument(
+        "--systemd",
+        action="store_true",
+        help="enable systemd integration (startup notification, socket passing)",
+    )
+    parser.add_argument(
+        "application",
+        help="the dotted.module.name:callable of the application",
+    )
+    return parser
+
+
 def main() -> None:
     """Run the application."""
     try:
@@ -159,84 +246,7 @@ def main() -> None:
         }
 
         # Parse and check command-line parameters.
-        parser = argparse.ArgumentParser(
-            description="Run an ASGI application under asyncio.",
-        )
-        group = parser.add_argument_group(
-            "behaviour options",
-            (
-                "options to control the internal behaviour of %(prog)s and enabling of "
-                "optional features"
-            ),
-        )
-        group.add_argument(
-            "--adapter",
-            default="asyncio",
-            choices=io_adapters,
-            help="the I/O adapter to use (default: asyncio)",
-        )
-        group.add_argument(
-            "--base-uri",
-            type=str,
-            help=(
-                "the request URI prefix to the base of the application for computing "
-                "root_path and path (default: use SCRIPT_NAME and PATH_INFO instead)"
-            ),
-        )
-        group = parser.add_argument_group(
-            "logging options",
-            "options to control the Python logging framework configuration",
-        )
-        group = group.add_mutually_exclusive_group()
-        group.add_argument(
-            "--logging",
-            "-l",
-            type=pathlib.Path,
-            help=(
-                "the JSON or TOML file containing a logging configuration dictionary "
-                "per logging.config.dictConfig (default: none)"
-            ),
-        )
-        group.add_argument(
-            "--log-level",
-            default="info",
-            choices=["debug", "info", "warning", "error", "critical"],
-            help="the level of log messages to show (default: %(default)s)",
-            metavar="level",
-        )
-        group = parser.add_argument_group(
-            "integration options",
-            (
-                "options to control where %(prog)s listens for connections and how it "
-                "integrates with system service management, etc."
-            ),
-        )
-        group.add_argument(
-            "--unix-socket",
-            "-u",
-            action="append",
-            default=[],
-            type=pathlib.Path,
-            help="the UNIX socket path to listen on",
-        )
-        group.add_argument(
-            "--tcp",
-            "-t",
-            action="append",
-            default=[],
-            type=TCPAddress,
-            help="the TCP address/port to listen on",
-            metavar="IPv4ADDR:PORT | [IPv6ADDR]:PORT | HOSTNAME:PORT",
-        )
-        group.add_argument(
-            "--systemd",
-            action="store_true",
-            help="enable systemd integration (startup notification, socket passing)",
-        )
-        parser.add_argument(
-            "application",
-            help="the dotted.module.name:callable of the application",
-        )
+        parser = make_arg_parser(io_adapters)
         args = parser.parse_args()
         if not any((args.unix_socket, args.tcp, args.systemd)):
             parser.error(

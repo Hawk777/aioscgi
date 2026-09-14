@@ -426,10 +426,15 @@ class Connection(abc.ABC):
                     await self._send_event(self._writer_pending_headers, drain=False)
                     self._writer_pending_headers = None
                 body = event.get("body")
+                more = event.get("more_body", False)
+                assert isinstance(more, bool)
                 if body:  # is present, not None, and nonzero length
                     assert isinstance(body, bytes)
-                    await self._send_event(sioscgi.response.Body(body), drain=True)
-                if not event.get("more_body", False):
+                    # If more=True then drain=True now. If more=False then we’re about
+                    # to drain=True in the “if not more” just below, so drain=False now
+                    # and we’ll combine draining the Body and End events.
+                    await self._send_event(sioscgi.response.Body(body), drain=more)
+                if not more:
                     await self._send_event(sioscgi.response.End(), drain=True)
             else:
                 msg = f"Unknown event type {event_type!r} passed to send"

@@ -236,6 +236,13 @@ class Connection(abc.ABC):
         "_request_ended": "Whether the end of the request has been received.",
         "_writer": "The SCGI protocol response state machine.",
         "_writer_mutex": "A mutex held by the task calling _send.",
+        "_writer_pending_headers": """
+            The pending response headers.
+
+            If the application has sent http.response.start but no body content, nothing
+            is sent to the SCGI client yet; instead, the response headers are held here
+            until the application generates body content.
+            """,
     }
 
     _container: Container
@@ -245,6 +252,7 @@ class Connection(abc.ABC):
     _request_ended: bool
     _writer: sioscgi.response.SCGIWriter
     _writer_mutex: AbstractAsyncContextManager[None]
+    _writer_pending_headers: sioscgi.response.Headers | None
 
     def __init__(self, container: Container) -> None:
         """
@@ -259,6 +267,7 @@ class Connection(abc.ABC):
         self._request_ended = False
         self._writer = sioscgi.response.SCGIWriter()
         self._writer_mutex = self.create_mutex()
+        self._writer_pending_headers = None
 
     @abc.abstractmethod
     def create_mutex(self) -> AbstractAsyncContextManager[None]:
@@ -401,8 +410,21 @@ class Connection(abc.ABC):
                     _calc_status(status_code),
                     filtered_headers,
                 )
-                await self._send_event(encoded, drain=False)
+                if self._writer_pending_headers is not None:
+                    # We want to report the problem immediately, but really it’s an SCGI
+                    # state machine error and therefore “should” be sioscgi’s job to
+                    # report. However, sioscgi can’t be responsible, because we’re
+                    # holding the response headers back until the first body part and
+                    # therefore sioscgi never actually sees anything. Just pretend.
+                    raise sioscgi.response.BadEventInStateError(
+                        sioscgi.response.Headers,
+                        self._writer.state,
+                    )
+                self._writer_pending_headers = encoded
             elif event_type == "http.response.body":
+                if self._writer_pending_headers is not None:
+                    await self._send_event(self._writer_pending_headers, drain=False)
+                    self._writer_pending_headers = None
                 body = event.get("body")
                 if body:  # is present, not None, and nonzero length
                     assert isinstance(body, bytes)

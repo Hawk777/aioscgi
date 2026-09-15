@@ -19,7 +19,7 @@ dev = [
 name = "aioscgi"
 version = "2.3.1"
 dependencies = [
-	"sioscgi >= 5.0, < 6.0",
+	"sioscgi ~= 5.0",
 ]
 requires-python = ">= 3.12"
 license = "GPL-3.0-only"

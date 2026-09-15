@@ -28,7 +28,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "sioscgi", specifier = ">=5.0,<6.0" }]
+requires-dist = [{ name = "sioscgi", specifier = "~=5.0" }]
 
 [package.metadata.requires-dev]
 ci = [

@@ -354,6 +354,7 @@ async def _main_coroutine_with_lifespan(
     :param term_event: An event that is set when the server should shut down.
     :param quit_event: An event that is set when the server should shut down fast.
     """
+    log = logging.getLogger(__name__)
     # We use _QuitError only to break through connection_tg. We don’t want it to
     # propagate further out.
     with contextlib.suppress(_QuitError):
@@ -366,14 +367,14 @@ async def _main_coroutine_with_lifespan(
 
                 # Start the server.
                 servers = await start_server_fn(connection_handler.handle_connection)
-                logging.getLogger(__name__).info("Server up and running")
+                log.info("Server up and running")
 
                 # Notify the listener.
                 listener.started()
 
                 # Wait until requested to terminate.
                 await term_event.wait()
-                logging.getLogger(__name__).info("Caught termination signal")
+                log.info("Caught termination signal")
 
                 # Notify the listener.
                 listener.stopping()
@@ -381,7 +382,7 @@ async def _main_coroutine_with_lifespan(
                 # Close the listening sockets.
                 for server in servers:
                     server.close()
-                logging.getLogger(__name__).info("Server no longer listening")
+                log.info("Server no longer listening")
 
                 # While waiting for client connections to finish, we must stop waiting
                 # and cancel them if a fast shutdown is requested. Spawn a task that
@@ -409,7 +410,7 @@ async def _main_coroutine_with_lifespan(
             # Now that all client connections are finished, we don’t need the quit
             # monitor task any more.
             quit_monitor.cancel()
-    logging.getLogger(__name__).info("All client connections closed")
+    log.info("All client connections closed")
 
 
 async def _start_servers_gen(

@@ -180,6 +180,15 @@ def make_arg_parser(io_adapters: Collection[str]) -> argparse.ArgumentParser:
         ),
     )
     group.add_argument(
+        "--shutdown-timeout",
+        default=30.0,
+        type=float,
+        help=(
+            "how long, in seconds, to wait for open connections to finish before "
+            "closing them forcefully (default: %(default).1f)"
+        ),
+    )
+    group.add_argument(
         "--x-sendfile",
         action="store_true",
         help=(
@@ -261,6 +270,10 @@ def main() -> None:
                 "At least one of --unix-socket, --tcp, or --systemd must be supplied.",
             )
 
+        # Sanity check.
+        if args.shutdown_timeout < 0:
+            parser.error("--shutdown-timeout must be non-negative.")
+
         # Set up logging.
         if args.logging is not None:
             with args.logging.open("rb") as logging_config_file:
@@ -316,6 +329,7 @@ def main() -> None:
             extra_sockets,
             container,
             start_stop_listener,
+            args.shutdown_timeout,
         )
     finally:
         logging.shutdown()

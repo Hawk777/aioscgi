@@ -184,6 +184,7 @@ async def _main_coroutine(
     ],
     container: Container,
     listener: StartStopListener,
+    shutdown_timeout: float,
 ) -> None:
     """
     Run the application in an asyncio event loop.
@@ -192,6 +193,8 @@ async def _main_coroutine(
         returns one or more servers.
     :param container: The ASGI container to use.
     :param listener: The start/stop listener to notify of startup/shutdown.
+    :param shutdown_timeout: How long to wait for open connections to finish before
+        closing them forcefully.
     """
     # Create the termination event and hook up the signal handlers, if signals are
     # supported.
@@ -220,6 +223,7 @@ async def _main_coroutine(
             listener,
             term_event,
             quit_event,
+            shutdown_timeout,
         )
     # If a lifespan error occurred, print it, but in its basic form, without a
     # traceback, because the traceback won’t show anything useful.
@@ -276,6 +280,7 @@ async def _main_coroutine_with_events(
     listener: StartStopListener,
     term_event: asyncio.Event,
     quit_event: asyncio.Event,
+    shutdown_timeout: float,
 ) -> None:
     """
     Run the application in an asyncio event loop with a termination event.
@@ -286,6 +291,8 @@ async def _main_coroutine_with_events(
     :param listener: The start/stop listener to notify of startup/shutdown.
     :param term_event: An event that is set when the server should shut down.
     :param quit_event: An event that is set when the server should shut down fast.
+    :param shutdown_timeout: How long to wait for open connections to finish before
+        closing them forcefully.
 
     :raise _LifespanStartError: If the application fails to initialize.
     :raise _LifespanStopError: If the application fails to shut down.
@@ -326,6 +333,7 @@ async def _main_coroutine_with_events(
                 listener,
                 term_event,
                 quit_event,
+                shutdown_timeout,
             )
         finally:
             # Shut down the application. If shutdown fails, this will raise
@@ -343,6 +351,7 @@ async def _main_coroutine_with_lifespan(
     listener: StartStopListener,
     term_event: asyncio.Event,
     quit_event: asyncio.Event,
+    shutdown_timeout: float,
 ) -> None:
     """
     Run the application in an asyncio event loop within lifespan protocol handling.
@@ -353,6 +362,8 @@ async def _main_coroutine_with_lifespan(
     :param listener: The start/stop listener to notify of startup/shutdown.
     :param term_event: An event that is set when the server should shut down.
     :param quit_event: An event that is set when the server should shut down fast.
+    :param shutdown_timeout: How long to wait for open connections to finish before
+        closing them forcefully.
     """
     log = logging.getLogger(__name__)
     # We use _QuitError only to break through connection_tg. We don’t want it to
@@ -360,53 +371,74 @@ async def _main_coroutine_with_lifespan(
     with contextlib.suppress(_QuitError):
         # Create a task group to hold the quit monitor, when created.
         async with asyncio.TaskGroup() as quit_monitor_tg:
-            # Create a task group to hold the connection handling tasks.
-            async with asyncio.TaskGroup() as connection_tg:
-                # Create a connection handler.
-                connection_handler = _ConnectionHandler(container, connection_tg)
+            # Create a task group to hold the connection handling tasks, and a timeout
+            # that will be scheduled later to bound connection task shutdown time.
+            try:
+                async with (
+                    asyncio.timeout(None) as timeout,
+                    asyncio.TaskGroup() as connection_tg,
+                ):
+                    # Create a connection handler.
+                    connection_handler = _ConnectionHandler(container, connection_tg)
 
-                # Start the server.
-                servers = await start_server_fn(connection_handler.handle_connection)
-                log.info("Server up and running")
+                    # Start the server.
+                    servers = await start_server_fn(
+                        connection_handler.handle_connection,
+                    )
+                    log.info("Server up and running")
 
-                # Notify the listener.
-                listener.started()
+                    # Notify the listener.
+                    listener.started()
 
-                # Wait until requested to terminate.
-                await term_event.wait()
-                log.info("Caught termination signal")
+                    # Wait until requested to terminate.
+                    await term_event.wait()
+                    log.info("Caught termination signal")
 
-                # Notify the listener.
-                listener.stopping()
+                    # Notify the listener.
+                    listener.stopping()
 
-                # Close the listening sockets.
-                for server in servers:
-                    server.close()
-                log.info("Server no longer listening")
+                    # Close the listening sockets.
+                    for server in servers:
+                        server.close()
+                    log.info("Server no longer listening")
 
-                # While waiting for client connections to finish, we must stop waiting
-                # and cancel them if a fast shutdown is requested. Spawn a task that
-                # will do that.
-                quit_monitor = quit_monitor_tg.create_task(
-                    _QuitError.raise_on_event(
-                        quit_event,
+                    # While waiting for client connections to finish, we must stop
+                    # waiting and cancel them if a fast shutdown is requested. Spawn a
+                    # task that will do that.
+                    quit_monitor = quit_monitor_tg.create_task(
+                        _QuitError.raise_on_event(
+                            quit_event,
+                        ),
+                    )
+
+                    # Start the timeout, giving connection-handling tasks a limit on how
+                    # long they have to shut down.
+                    timeout.reschedule(
+                        asyncio.get_event_loop().time() + shutdown_timeout,
+                    )
+
+                    # Wait until all the client connections finish. Each time a task
+                    # finishes, it removes itself from the set, and we want to wait
+                    # until they are all gone, so just wait for an arbitrary task over
+                    # and over until the set is empty.
+                    #
+                    # In some versions of Python, wait_closed theoretically waits until
+                    # the closure of the listening socket is complete, but in practice
+                    # doesn’t actually do anything because the listening socket is
+                    # closed synchronously. In other versions of Python, wait_closed
+                    # does that and also waits until all accepted connections have been
+                    # completed as well. Either way, it’s reasonable to call it and to
+                    # consider it part of waiting for closure of existing connections.
+                    for server in servers:
+                        await server.wait_closed()
+            except TimeoutError:
+                log.warning(
+                    (
+                        "Some connection tasks did not stop within %.1f second(s) and "
+                        "were cancelled"
                     ),
+                    shutdown_timeout,
                 )
-
-                # Wait until all the client connections finish. Each time a task
-                # finishes, it removes itself from the set, and we want to wait until
-                # they are all gone, so just wait for an arbitrary task over and over
-                # until the set is empty.
-                #
-                # In some versions of Python, wait_closed theoretically waits until the
-                # closure of the listening socket is complete, but in practice doesn’t
-                # actually do anything because the listening socket is closed
-                # synchronously. In other versions of Python, wait_closed does that and
-                # also waits until all accepted connections have been completed as well.
-                # Either way, it’s reasonable to call it and to consider it part of
-                # waiting for closure of existing connections.
-                for server in servers:
-                    await server.wait_closed()
             # Now that all client connections are finished, we don’t need the quit
             # monitor task any more.
             quit_monitor.cancel()
@@ -514,6 +546,7 @@ def run(
     extra_sockets: Iterable[socket.socket],
     container: Container,
     listener: StartStopListener,
+    shutdown_timeout: float,
 ) -> None:
     """
     Run an application listening for SCGI connections on one or more TCP/UNIX sockets.
@@ -529,11 +562,14 @@ def run(
     :param extra_sockets: The extra already-bound sockets on which to listen.
     :param container: The ASGI container to use.
     :param listener: The start/stop listener to notify of startup/shutdown.
+    :param shutdown_timeout: How long to wait for open connections to finish before
+        closing them forcefully.
     """
     asyncio.run(
         _main_coroutine(
             functools.partial(_start_servers, tcp_addresses, unix_paths, extra_sockets),
             container,
             listener,
+            shutdown_timeout,
         ),
     )

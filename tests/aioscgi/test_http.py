@@ -172,7 +172,7 @@ def run_test(
         assert scope["type"] == "http"
         assert isinstance(scope["asgi"], dict)
         assert scope["asgi"]["version"] == "3.0"
-        assert scope["asgi"]["spec_version"] == "2.4"
+        assert scope["asgi"]["spec_version"] == "2.5"
         assert scope["http_version"] == "1.1"
         assert scope["method"] == "GET"
         assert scope["scheme"] == scheme

@@ -1,3 +1,43 @@
+Changes in 2.4.0
+================
+
+The minimum Python version was increased to 3.12.
+
+The ``aioscgi.asyncio.ConnectionHandler`` class, which was always intended to
+be private, is now private.
+
+New command-line options ``--log-level`` and ``--shutdown-timeout`` were added.
+
+The command-line option ``--logging`` can now be provided a TOML file as an
+alternative to a JSON file.
+
+The ``http.response.pathsend`` extension was implemented, controlled by the new
+``--x-sendfile`` command-line option.
+
+The claimed HTTP specification version is now 2.5 rather than 2.4. There is no
+difference between these versions outside of the Websocket sections, which
+``sioscgi`` does not currently implement, so there is no change in behaviour.
+
+The HTTP protocol’s send function, when called after the connection has been
+closed, now raises a private, server-specific subclass of ``BrokenPipeError``,
+in compliance with the wording of the ASGI specification. This replaces the
+previous behaviour of raising ``BrokenPipeError`` or ``ConnectionResetError``
+directly.
+
+The HTTP protocol’s send function, when given an event of type
+``http.response.start``, will now defer sending the HTTP headers until the
+first ``http.response.body`` event, rather than sending them immediately; both
+old and new behaviours are compliant with the ASGI specification.
+
+On UNIX platforms, ``SIGQUIT`` is now handled and performs a fast shutdown by
+cancelling running coroutines rather than immediately terminating the process.
+
+The build system is changed from setuptools to uv_build.
+
+Documentation was improved.
+
+Significant internal cleanup was performed.
+
 Changes in 2.3.1
 ================
 

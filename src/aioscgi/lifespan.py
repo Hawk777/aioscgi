@@ -85,7 +85,7 @@ def _wrapper(
             # Per the spec, exceptions raised by the application callable for a lifespan
             # scope should not prevent the server from working, but should just indicate
             # no support for the lifespan protocol. Run whatever is left of the lifespan
-            # protocol locally, so the Manager can just assume lifespan is always
+            # protocol locally, so the _Manager can just assume lifespan is always
             # supported.
             crashed = True
             logging.getLogger(__name__).info(
@@ -109,31 +109,8 @@ def _wrapper(
     return impl
 
 
-class Manager:
-    """
-    Implements the ASGI lifespan protocol.
-
-    This class is meant for use by an I/O adapter. The intended workflow is as follows:
-    1.  The adapter constructs a Manager class. It passes the application callable
-        directly. The other awaitables and the mutex should be constructed as
-        appropriate for the I/O library. The callables should typically signal
-        awaitables that the adapter’s main task can await, again as appropriate for the
-        I/O library.
-    2.  The adapter spawns a task which runs the Manager’s run method.
-    3.  The adapter waits until the started callable is invoked (typically by the
-        started callable signalling something which the adapter’s main task is
-        awaiting). If an error message was provided, that message should be reported and
-        startup aborted.
-    4.  The adapter starts listening and running connections.
-    5.  The adapter determines it is time to shut down the server.
-    6.  The adapter stops listening.
-    7.  If appropriate, the adapter waits for ongoing connections to complete. Otherwise
-        it may choose to cancel them.
-    8.  The adapter causes the awaitable passed as shutting_down to become ready.
-    9.  The adapter waits until the shutdown_complete callable is invoked. If an error
-        message was provided, that message should be reported.
-    10. The adapter waits until the task which called the run method completes.
-    """
+class _Manager:
+    """Implements the ASGI lifespan protocol."""
 
     __slots__ = {  # noqa: RUF023 the attributes are ordered by function, not name
         "_container": "The ASGI container.",
@@ -175,20 +152,20 @@ class Manager:
         shutdown_complete: Callable[[str | None], None],
     ) -> None:
         """
-        Construct a new Manager.
+        Construct a new _Manager.
 
         :param container: The ASGI container.
         :param never: An awaitable that will never complete.
         :param mutex: A mutex (async context manager that can only be entered by one
             task at a time) that the lifespan manager can use internally and that is not
             used by the caller in any way.
-        :param started: A callable that Manager invokes once the application has started
-            up, passing the failure message if startup failed or None if startup
+        :param started: A callable that _Manager invokes once the application has
+            started up, passing the failure message if startup failed or None if startup
             succeeded. This callable is invoked on whatever task the application uses to
             send the lifespan.startup.{complete,failed} event.
         :param shutting_down: An awaitable that the caller makes ready when the server
             begins shutting down.
-        :param shutdown_complete: A callable that Manager invokes once the application
+        :param shutdown_complete: A callable that _Manager invokes once the application
             has shut down, passing the failure message if shutdown failed or None if
             shutdown succeeded. This callable is invoked on whatever task the
             application uses to send the lifespan.shutdown.{complete,failed} event.
@@ -268,3 +245,64 @@ class Manager:
                 raise ValueError(msg)
             self._shutdown_complete_called = True
             self._shutdown_complete(error_message)
+
+
+async def run(
+    container: Container,
+    never: Awaitable[None],
+    mutex: AbstractAsyncContextManager[Any],
+    started: Callable[[str | None], None],
+    shutting_down: Awaitable[None],
+    shutdown_complete: Callable[[str | None], None],
+) -> None:
+    """
+    Run the lifespan protocol.
+
+    This function is meant to be called by an I/O adapter. The intended workflow is as
+    follows:
+    1.  The adapter constructs the dependencies needed by this function. It passes the
+        application callable directly. The other awaitables and the mutex should be
+        constructed as appropriate for the I/O library. The callables should typically
+        signal awaitables that the adapter’s main task can await, again as appropriate
+        for the I/O library.
+    2.  The adapter spawns a task which runs this function, passing the dependencies.
+    3.  The adapter waits until the started callable is invoked (typically by the
+        started callable signalling something which the adapter’s main task is
+        awaiting). If an error message was provided, that message should be reported and
+        startup aborted.
+    4.  The adapter starts listening and running connections.
+    5.  The adapter determines it is time to shut down the server.
+    6.  The adapter stops listening.
+    7.  If appropriate, the adapter waits for ongoing connections to complete. Otherwise
+        it may choose to cancel them.
+    8.  The adapter causes the awaitable passed as shutting_down to become ready.
+    9.  The adapter waits until the shutdown_complete callable is invoked. If an error
+        message was provided, that message should be reported.
+    10. The adapter waits until the task which called  this function completes.
+
+    The callables will be invoked directly in the task that called this function.
+
+    :param container: The ASGI container.
+    :param never: An awaitable that will never complete.
+    :param mutex: A mutex (async context manager that can only be entered by one
+        task at a time) that the lifespan manager can use internally and that is not
+        used by the caller in any way.
+    :param started: A callable that is invoked once the application has started up,
+        passing the failure message if startup failed or None if startup succeeded. This
+        callable is invoked on whatever task the application uses to send the
+        lifespan.startup.{complete,failed} event.
+    :param shutting_down: An awaitable that the caller makes ready when the server
+        begins shutting down.
+    :param shutdown_complete: A callable that is invoked once the application has shut
+        down, passing the failure message if shutdown failed or None if shutdown
+        succeeded. This callable is invoked on whatever task the application uses to
+        send the lifespan.shutdown.{complete,failed} event.
+    """
+    await _Manager(
+        container,
+        never,
+        mutex,
+        started,
+        shutting_down,
+        shutdown_complete,
+    ).run()

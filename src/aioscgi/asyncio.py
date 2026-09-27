@@ -338,23 +338,24 @@ async def _main_coroutine_guarded(
         lifespan_started = loop.create_future()
         lifespan_shutting_down = loop.create_future()
         lifespan_shutdown_complete = loop.create_future()
-        lifespan_manager = lifespan.Manager(
-            container,
-            loop.create_future(),
-            asyncio.Lock(),
-            functools.partial(
-                _complete_lifespan_future,
-                lifespan_started,
-                _LifespanStartError,
-            ),
-            lifespan_shutting_down,
-            functools.partial(
-                _complete_lifespan_future,
-                lifespan_shutdown_complete,
-                _LifespanStopError,
+        lifespan_tg.create_task(
+            lifespan.run(
+                container,
+                loop.create_future(),
+                asyncio.Lock(),
+                functools.partial(
+                    _complete_lifespan_future,
+                    lifespan_started,
+                    _LifespanStartError,
+                ),
+                lifespan_shutting_down,
+                functools.partial(
+                    _complete_lifespan_future,
+                    lifespan_shutdown_complete,
+                    _LifespanStopError,
+                ),
             ),
         )
-        lifespan_tg.create_task(lifespan_manager.run())
 
         # Wait for the application to start. If startup fails, this will raise
         # _LifespanStartError.

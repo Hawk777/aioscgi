@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 from aioscgi.container import Container
-from aioscgi.lifespan import Manager
+from aioscgi.lifespan import run
 from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
 
 
@@ -42,7 +42,7 @@ async def test_lifespan_startup_successful() -> None:
     def shutdown_complete(_error_message: str | None) -> None:
         raise NotImplementedError
 
-    uut = Manager(
+    uut = run(
         Container(app, None),
         loop.create_future(),
         asyncio.Lock(),
@@ -57,7 +57,7 @@ async def test_lifespan_startup_successful() -> None:
     assert not shutdown_seen
 
     # Fork off a task.
-    uut_future = asyncio.create_task(uut.run())
+    uut_future = asyncio.create_task(uut)
 
     # Let the task run.
     await asyncio.sleep(0)
@@ -103,7 +103,7 @@ async def test_lifespan_startup_failed() -> None:
     def shutdown_complete(_error_message: str | None) -> None:
         raise NotImplementedError
 
-    uut = Manager(
+    uut = run(
         Container(app, None),
         loop.create_future(),
         asyncio.Lock(),
@@ -118,7 +118,7 @@ async def test_lifespan_startup_failed() -> None:
     assert not shutdown_seen
 
     # Fork off a task.
-    uut_future = asyncio.create_task(uut.run())
+    uut_future = asyncio.create_task(uut)
 
     # Let the task run.
     await asyncio.sleep(0)
@@ -167,7 +167,7 @@ async def test_lifespan_shutdown_successful() -> None:
         shutdown_complete_called = True
 
     shutting_down = loop.create_future()
-    uut = Manager(
+    uut = run(
         Container(app, None),
         loop.create_future(),
         asyncio.Lock(),
@@ -181,7 +181,7 @@ async def test_lifespan_shutdown_successful() -> None:
     assert not shutdown_complete_called
 
     # Fork off a task.
-    uut_future = asyncio.create_task(uut.run())
+    uut_future = asyncio.create_task(uut)
 
     # Let the task run.
     await asyncio.sleep(0)
@@ -239,7 +239,7 @@ async def test_lifespan_shutdown_failed() -> None:
         shutdown_complete_called = True
 
     shutting_down = loop.create_future()
-    uut = Manager(
+    uut = run(
         Container(app, None),
         loop.create_future(),
         asyncio.Lock(),
@@ -253,7 +253,7 @@ async def test_lifespan_shutdown_failed() -> None:
     assert not shutdown_complete_called
 
     # Fork off a task.
-    uut_future = asyncio.create_task(uut.run())
+    uut_future = asyncio.create_task(uut)
 
     # Let the task run.
     await asyncio.sleep(0)
@@ -306,7 +306,7 @@ async def test_lifespan_not_supported() -> None:
         shutdown_complete_called = True
 
     shutting_down = loop.create_future()
-    uut = Manager(
+    uut = run(
         Container(app, None),
         loop.create_future(),
         asyncio.Lock(),
@@ -320,7 +320,7 @@ async def test_lifespan_not_supported() -> None:
     assert not shutdown_complete_called
 
     # Fork off a task.
-    uut_future = asyncio.create_task(uut.run())
+    uut_future = asyncio.create_task(uut)
 
     # Let the task run.
     await asyncio.sleep(0)

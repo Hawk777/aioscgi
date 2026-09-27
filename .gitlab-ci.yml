@@ -34,8 +34,8 @@ mypy:
       paths:
         - .mypy_cache/
   script:
-    - uv run --group ci mypy --strict --output=json src tests > mypy.json || true
-    - uv run --group ci mypy-gitlab-code-quality < mypy.json > mypy-gitlab.json
+    - uv run --locked --group ci mypy --strict --output=json src tests > mypy.json || true
+    - uv run --locked --group ci mypy-gitlab-code-quality < mypy.json > mypy-gitlab.json
   artifacts:
     reports:
       codequality:
@@ -44,8 +44,8 @@ mypy:
 Ruff:
   needs: []
   script:
-    - uv run ruff format --check --diff
-    - uv run ruff check --output-format=gitlab > ruff-gitlab.json
+    - uv run --locked ruff format --check --diff
+    - uv run --locked ruff check --output-format=gitlab > ruff-gitlab.json
   artifacts:
     reports:
       codequality:
@@ -54,7 +54,7 @@ Ruff:
 Pylint:
   needs: []
   script:
-    - uv run --group ci pylint --output=pylint-gitlab.json --load-plugins=pylint_gitlab --output-format=gitlab-codeclimate src tests
+    - uv run --locked --group ci pylint --output=pylint-gitlab.json --load-plugins=pylint_gitlab --output-format=gitlab-codeclimate src tests
   artifacts:
     reports:
       codequality:
@@ -63,7 +63,7 @@ Pylint:
 Unit tests:
   needs: []
   script:
-    - uv run pytest --junit-xml=results.xml
+    - uv run --locked pytest --junit-xml=results.xml
   artifacts:
     reports:
       junit: results.xml

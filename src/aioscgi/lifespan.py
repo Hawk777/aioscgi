@@ -177,8 +177,6 @@ class Manager:
         """
         Construct a new Manager.
 
-        The callables will be invoked in the task that runs the lifespan protocol.
-
         :param container: The ASGI container.
         :param never: An awaitable that will never complete.
         :param mutex: A mutex (async context manager that can only be entered by one
@@ -186,12 +184,14 @@ class Manager:
             used by the caller in any way.
         :param started: A callable that Manager invokes once the application has started
             up, passing the failure message if startup failed or None if startup
-            succeeded.
+            succeeded. This callable is invoked on whatever task the application uses to
+            send the lifespan.startup.{complete,failed} event.
         :param shutting_down: An awaitable that the caller makes ready when the server
             begins shutting down.
         :param shutdown_complete: A callable that Manager invokes once the application
             has shut down, passing the failure message if shutdown failed or None if
-            shutdown succeeded.
+            shutdown succeeded. This callable is invoked on whatever task the
+            application uses to send the lifespan.shutdown.{complete,failed} event.
         """
         self._container = container
         self._wrapped_application = _wrapper(container.application, never)

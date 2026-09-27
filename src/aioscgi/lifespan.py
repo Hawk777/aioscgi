@@ -119,7 +119,7 @@ class _Manager:
         "_started": "A callable to invoke once the application has started up.",
         "_started_called": "Whether _started has been called.",
         "_shutting_down": """
-            An awaitable that becomes ready when the server begins shutting down.
+            A coroutine function that returns when the server begins shutting down.
             """,
         "_shutdown_complete": """
             A callable to invoke once the application has shut down.
@@ -136,7 +136,7 @@ class _Manager:
     _never: Awaitable[None]
     _started: Callable[[str | None], None]
     _started_called: bool
-    _shutting_down: Awaitable[None]
+    _shutting_down: Callable[[], Awaitable[Any]]
     _shutdown_complete: Callable[[str | None], None]
     _shutdown_complete_called: bool
     _receive_mutex: AbstractAsyncContextManager[Any]
@@ -148,7 +148,7 @@ class _Manager:
         never: Awaitable[None],
         mutex: AbstractAsyncContextManager[Any],
         started: Callable[[str | None], None],
-        shutting_down: Awaitable[None],
+        shutting_down: Callable[[], Awaitable[Any]],
         shutdown_complete: Callable[[str | None], None],
     ) -> None:
         """
@@ -163,8 +163,9 @@ class _Manager:
             started up, passing the failure message if startup failed or None if startup
             succeeded. This callable is invoked on whatever task the application uses to
             send the lifespan.startup.{complete,failed} event.
-        :param shutting_down: An awaitable that the caller makes ready when the server
-            begins shutting down.
+        :param shutting_down: A coroutine function that returns when the server begins
+            shutting down. The I/O library must not permit this to return until after
+            started has been called.
         :param shutdown_complete: A callable that _Manager invokes once the application
             has shut down, passing the failure message if shutdown failed or None if
             shutdown succeeded. This callable is invoked on whatever task the
@@ -200,7 +201,7 @@ class _Manager:
     async def _receive_gen(self) -> AsyncIterator[EventOrScope]:
         """Generate events for the application to receive."""
         yield {"type": "lifespan.startup"}
-        await self._shutting_down
+        await self._shutting_down()
         yield {"type": "lifespan.shutdown"}
         await self._never
 
@@ -252,7 +253,7 @@ async def run(
     never: Awaitable[None],
     mutex: AbstractAsyncContextManager[Any],
     started: Callable[[str | None], None],
-    shutting_down: Awaitable[None],
+    shutting_down: Callable[[], Awaitable[Any]],
     shutdown_complete: Callable[[str | None], None],
 ) -> None:
     """
@@ -275,7 +276,7 @@ async def run(
     6.  The adapter stops listening.
     7.  If appropriate, the adapter waits for ongoing connections to complete. Otherwise
         it may choose to cancel them.
-    8.  The adapter causes the awaitable passed as shutting_down to become ready.
+    8.  The adapter causes any current and/or future awaits of shutting_down to return.
     9.  The adapter waits until the shutdown_complete callable is invoked. If an error
         message was provided, that message should be reported.
     10. The adapter waits until the task which called  this function completes.
@@ -291,8 +292,9 @@ async def run(
         passing the failure message if startup failed or None if startup succeeded. This
         callable is invoked on whatever task the application uses to send the
         lifespan.startup.{complete,failed} event.
-    :param shutting_down: An awaitable that the caller makes ready when the server
-        begins shutting down.
+    :param shutting_down: A coroutine function that returns when the server begins
+        shutting down. The I/O library must not permit this to return until after
+        started has been called.
     :param shutdown_complete: A callable that is invoked once the application has shut
         down, passing the failure message if shutdown failed or None if shutdown
         succeeded. This callable is invoked on whatever task the application uses to

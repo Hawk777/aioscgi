@@ -336,7 +336,7 @@ async def _main_coroutine_guarded(
         # Start up the lifespan protocol.
         loop = asyncio.get_event_loop()
         lifespan_started = loop.create_future()
-        lifespan_shutting_down = loop.create_future()
+        lifespan_shutting_down = asyncio.Event()
         lifespan_shutdown_complete = loop.create_future()
         lifespan_tg.create_task(
             lifespan.run(
@@ -348,7 +348,7 @@ async def _main_coroutine_guarded(
                     lifespan_started,
                     _LifespanStartError,
                 ),
-                lifespan_shutting_down,
+                lifespan_shutting_down.wait,
                 functools.partial(
                     _complete_lifespan_future,
                     lifespan_shutdown_complete,
@@ -374,7 +374,7 @@ async def _main_coroutine_guarded(
         finally:
             # Shut down the application. If shutdown fails, this will raise
             # _LifespanStopError.
-            lifespan_shutting_down.set_result(None)
+            lifespan_shutting_down.set()
             await lifespan_shutdown_complete
 
 

@@ -47,7 +47,7 @@ async def test_lifespan_startup_successful() -> None:
         loop.create_future(),
         asyncio.Lock(),
         started,
-        loop.create_future(),
+        asyncio.Event().wait,
         shutdown_complete,
     )
 
@@ -108,7 +108,7 @@ async def test_lifespan_startup_failed() -> None:
         loop.create_future(),
         asyncio.Lock(),
         started,
-        loop.create_future(),
+        asyncio.Event().wait,
         shutdown_complete,
     )
 
@@ -166,13 +166,13 @@ async def test_lifespan_shutdown_successful() -> None:
         assert error_message is None
         shutdown_complete_called = True
 
-    shutting_down = loop.create_future()
+    shutting_down = asyncio.Event()
     uut = run(
         Container(app, None),
         loop.create_future(),
         asyncio.Lock(),
         started,
-        shutting_down,
+        shutting_down.wait,
         shutdown_complete,
     )
 
@@ -191,7 +191,7 @@ async def test_lifespan_shutdown_successful() -> None:
     assert not shutdown_complete_called
 
     # Initiate shutdown.
-    shutting_down.set_result(None)
+    shutting_down.set()
 
     # Let the task run.
     await asyncio.sleep(0)
@@ -238,13 +238,13 @@ async def test_lifespan_shutdown_failed() -> None:
         assert error_message == "FOO"
         shutdown_complete_called = True
 
-    shutting_down = loop.create_future()
+    shutting_down = asyncio.Event()
     uut = run(
         Container(app, None),
         loop.create_future(),
         asyncio.Lock(),
         started,
-        shutting_down,
+        shutting_down.wait,
         shutdown_complete,
     )
 
@@ -263,7 +263,7 @@ async def test_lifespan_shutdown_failed() -> None:
     assert not shutdown_complete_called
 
     # Initiate shutdown.
-    shutting_down.set_result(None)
+    shutting_down.set()
 
     # Let the task run.
     await asyncio.sleep(0)
@@ -305,13 +305,13 @@ async def test_lifespan_not_supported() -> None:
         assert error_message is None
         shutdown_complete_called = True
 
-    shutting_down = loop.create_future()
+    shutting_down = asyncio.Event()
     uut = run(
         Container(app, None),
         loop.create_future(),
         asyncio.Lock(),
         started,
-        shutting_down,
+        shutting_down.wait,
         shutdown_complete,
     )
 
@@ -330,7 +330,7 @@ async def test_lifespan_not_supported() -> None:
     assert not shutdown_complete_called
 
     # Initiate shutdown.
-    shutting_down.set_result(None)
+    shutting_down.set()
 
     # Let the task run.
     await asyncio.sleep(0)

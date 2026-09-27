@@ -215,9 +215,43 @@ async def _main_coroutine(
                 quit_event,
             )
 
+    # Run the server.
+    await _main_coroutine_with_events(
+        start_server_fn,
+        container,
+        listener,
+        term_event,
+        quit_event,
+        shutdown_timeout,
+    )
+
+
+async def _main_coroutine_with_events(
+    start_server_fn: Callable[
+        [Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]],
+        Awaitable[list[asyncio.Server]],
+    ],
+    container: Container,
+    listener: StartStopListener,
+    term_event: asyncio.Event,
+    quit_event: asyncio.Event,
+    shutdown_timeout: float,
+) -> None:
+    """
+    Run the application in an asyncio event loop with a termination event.
+
+    :param start_server_fn: A function which accepts a connection handler and starts and
+        returns one or more servers.
+    :param container: The ASGI container to use.
+    :param listener: The start/stop listener to notify of startup/shutdown.
+    :param term_event: An event that is set when the server should shut down.
+    :param quit_event: An event that is set when the server should shut down fast.
+    :param shutdown_timeout: How long to wait for open connections to finish before
+        closing them forcefully.
+    """
     try:
         # Run the server.
-        await _main_coroutine_with_events(
+        await _main_coroutine_guarded(
             start_server_fn,
             container,
             listener,
@@ -245,6 +279,7 @@ async def _main_coroutine(
         # protocol should have shut them down), but a poorly written application might
         # have left some background tasks running which would otherwise prevent us from
         # shutting down.
+        loop = asyncio.get_event_loop()
         all_tasks = asyncio.all_tasks(loop)
         if len(all_tasks) > 1:  # If it’s just one, it’s ourself!
             logging.getLogger(__name__).warning(
@@ -271,7 +306,7 @@ async def _main_coroutine(
                     )
 
 
-async def _main_coroutine_with_events(
+async def _main_coroutine_guarded(
     start_server_fn: Callable[
         [Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]],
         Awaitable[list[asyncio.Server]],
@@ -283,7 +318,7 @@ async def _main_coroutine_with_events(
     shutdown_timeout: float,
 ) -> None:
     """
-    Run the application in an asyncio event loop with a termination event.
+    Run the application inside a lifespan-error-reporting, task-cancelling guard.
 
     :param start_server_fn: A function which accepts a connection handler and starts and
         returns one or more servers.

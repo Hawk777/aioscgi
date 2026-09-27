@@ -45,7 +45,6 @@ async def test_lifespan_startup_successful() -> None:
     uut = run(
         Container(app, None),
         loop.create_future(),
-        asyncio.Lock(),
         started,
         asyncio.Event().wait,
         shutdown_complete,
@@ -106,7 +105,6 @@ async def test_lifespan_startup_failed() -> None:
     uut = run(
         Container(app, None),
         loop.create_future(),
-        asyncio.Lock(),
         started,
         asyncio.Event().wait,
         shutdown_complete,
@@ -170,7 +168,6 @@ async def test_lifespan_shutdown_successful() -> None:
     uut = run(
         Container(app, None),
         loop.create_future(),
-        asyncio.Lock(),
         started,
         shutting_down.wait,
         shutdown_complete,
@@ -242,7 +239,6 @@ async def test_lifespan_shutdown_failed() -> None:
     uut = run(
         Container(app, None),
         loop.create_future(),
-        asyncio.Lock(),
         started,
         shutting_down.wait,
         shutdown_complete,
@@ -309,7 +305,6 @@ async def test_lifespan_not_supported() -> None:
     uut = run(
         Container(app, None),
         loop.create_future(),
-        asyncio.Lock(),
         started,
         shutting_down.wait,
         shutdown_complete,

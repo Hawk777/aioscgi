@@ -2,111 +2,36 @@
 
 from __future__ import annotations
 
+import enum
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import AbstractAsyncContextManager
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .container import Container
-from .types import ApplicationType, EventOrScope, ReceiveFunction, SendFunction
-
-type _WrappedApplicationType = Callable[
-    [EventOrScope, ReceiveFunction, SendFunction],
-    Awaitable[None],
-]
+from .types import EventOrScope
 
 
-def _wrapper(
-    application: ApplicationType,
-    never: Awaitable[None],
-) -> _WrappedApplicationType:
-    """
-    Wrap the application callable for the lifespan protocol and deal with exceptions.
+@enum.unique
+class _State(enum.Enum):
+    """The states the lifespan protocol can be in."""
 
-    :param application: The application.
-    :param never: An awaitable that will never complete.
-    :return: A wrapped callable that will not raise exceptions.
-    """
+    PRE_START = enum.auto()
+    """The application has not received the startup event yet."""
 
-    async def impl(
-        scope: EventOrScope,
-        receive: ReceiveFunction,
-        send: SendFunction,
-    ) -> None:
-        nonlocal application, never
+    STARTING = enum.auto()
+    """The application has received but not responded to the startup event."""
 
-        # Track whether each type of message has occurred yet.
-        startup_received = False
-        startup_complete_sent = False
-        shutdown_received = False
-        shutdown_complete_sent = False
+    RUNNING = enum.auto()
+    """Startup is complete and shutdown has not started yet."""
 
-        # Track whether the application callable has crashed. According to the spec, if
-        # the lifespan coroutine crashes, no more lifespan events should be passed to
-        # (and presumably received from) the application; however, the lifespan
-        # coroutine could have handed copies of the send and receive functions to
-        # another task before crashing, so to comply with the spec, we must prevent
-        # *that* task from calling receive and seeing an event as well.
-        crashed = False
+    STOPPING = enum.auto()
+    """The application has received but not responded to the shutdown event."""
 
-        # Wrap the send and receive functions to be passed into the application so that
-        # they track the state.
-        async def wrapped_receive() -> EventOrScope:
-            nonlocal crashed, startup_received, shutdown_received
-            if crashed:
-                # The application callable crashed, so per the spec, the application as
-                # a whole should not see any more lifespan events.
-                await never
-            event = await receive()
-            match event["type"]:
-                case "lifespan.startup":
-                    startup_received = True
-                case "lifespan.shutdown":
-                    shutdown_received = True
-            return event
+    STOPPED = enum.auto()
+    """Shutdown is complete."""
 
-        async def wrapped_send(event: EventOrScope) -> None:
-            nonlocal crashed, startup_complete_sent, shutdown_complete_sent
-            if crashed:
-                # The application callable crashed, so the application should no longer
-                # be involved in lifespan tracking.
-                return None
-            match event.get("type"):
-                case "lifespan.startup.complete" | "lifespan.startup.failed":
-                    startup_complete_sent = True
-                case "lifespan.shutdown.complete" | "lifespan.shutdown.failed":
-                    shutdown_complete_sent = True
-            return await send(event)
-
-        # Delegate to the application callable, catching exceptions.
-        try:
-            await application(scope, wrapped_receive, wrapped_send)
-        except Exception:  # pylint: disable=broad-except
-            # Per the spec, exceptions raised by the application callable for a lifespan
-            # scope should not prevent the server from working, but should just indicate
-            # no support for the lifespan protocol. Run whatever is left of the lifespan
-            # protocol locally, so the _Manager can just assume lifespan is always
-            # supported.
-            crashed = True
-            logging.getLogger(__name__).info(
-                "Uncaught exception in application callable for lifespan protocol, "
-                "proceeding anyway",
-                exc_info=True,
-            )
-            while not startup_received:
-                match (await receive())["type"]:
-                    case "lifespan.startup":
-                        startup_received = True
-                    case "lifespan.shutdown":
-                        shutdown_received = True
-            if not startup_complete_sent:
-                await send({"type": "lifespan.startup.complete"})
-            while not shutdown_received:
-                shutdown_received = (await receive())["type"] == "lifespan.shutdown"
-            if not shutdown_complete_sent:
-                await send({"type": "lifespan.shutdown.complete"})
-
-    return impl
+    CRASHED = enum.auto()
+    """The application crashed in the lifespan protocol task."""
 
 
 class _Manager:
@@ -114,39 +39,28 @@ class _Manager:
 
     __slots__ = {  # noqa: RUF023 the attributes are ordered by function, not name
         "_container": "The ASGI container.",
-        "_wrapped_application": "The application, wrapped for exception handling.",
         "_never": "An awaitable that will never complete.",
         "_started": "A callable to invoke once the application has started up.",
-        "_started_called": "Whether _started has been called.",
         "_shutting_down": """
             A coroutine function that returns when the server begins shutting down.
             """,
         "_shutdown_complete": """
             A callable to invoke once the application has shut down.
             """,
-        "_shutdown_complete_called": "Whether _shutdown_complete has been called.",
-        "_startup_done": "Whether startup.{complete,failed} was sent.",
-        "_shutdown_done": "Whether shutdown.{complete,failed} was sent.",
-        "_receive_mutex": "A mutex used to protect concurrent receives.",
-        "_receive_iter": "An asynchronous iterator over the events to receive.",
+        "_state": "The current state of the lifespan protocol.",
     }
 
     _container: Container
-    _wrapped_application: _WrappedApplicationType
     _never: Awaitable[None]
     _started: Callable[[str | None], None]
-    _started_called: bool
     _shutting_down: Callable[[], Awaitable[Any]]
     _shutdown_complete: Callable[[str | None], None]
-    _shutdown_complete_called: bool
-    _receive_mutex: AbstractAsyncContextManager[Any]
-    _receive_iter: AsyncIterator[EventOrScope]
+    _state: _State
 
     def __init__(
         self,
         container: Container,
         never: Awaitable[None],
-        mutex: AbstractAsyncContextManager[Any],
         started: Callable[[str | None], None],
         shutting_down: Callable[[], Awaitable[Any]],
         shutdown_complete: Callable[[str | None], None],
@@ -156,9 +70,6 @@ class _Manager:
 
         :param container: The ASGI container.
         :param never: An awaitable that will never complete.
-        :param mutex: A mutex (async context manager that can only be entered by one
-            task at a time) that the lifespan manager can use internally and that is not
-            used by the caller in any way.
         :param started: A callable that _Manager invokes once the application has
             started up, passing the failure message if startup failed or None if startup
             succeeded. This callable is invoked on whatever task the application uses to
@@ -172,15 +83,11 @@ class _Manager:
             application uses to send the lifespan.shutdown.{complete,failed} event.
         """
         self._container = container
-        self._wrapped_application = _wrapper(container.application, never)
         self._never = never
         self._started = started
-        self._started_called = False
         self._shutting_down = shutting_down
         self._shutdown_complete = shutdown_complete
-        self._shutdown_complete_called = False
-        self._receive_mutex = mutex
-        self._receive_iter = self._receive_gen()
+        self._state = _State.PRE_START
 
     async def run(self) -> None:
         """
@@ -196,36 +103,103 @@ class _Manager:
             },
             "state": self._container.state,
         }
-        return await self._wrapped_application(scope, self._receive, self._send)
-
-    async def _receive_gen(self) -> AsyncIterator[EventOrScope]:
-        """Generate events for the application to receive."""
-        yield {"type": "lifespan.startup"}
-        await self._shutting_down()
-        yield {"type": "lifespan.shutdown"}
-        await self._never
+        try:
+            await self._container.application(scope, self._receive, self._send)
+        # pylint: disable-next=broad-exception-caught
+        except Exception:
+            # The application crashed in the lifespan protocol. Report the crash, stop
+            # giving the application any more lifespan events, and continue the state
+            # machine ourself to allow the server as a whole to finish starting up and,
+            # when needed, shutting down.
+            local_state = self._state
+            self._state = _State.CRASHED
+            logging.getLogger(__name__).info(
+                "Uncaught exception in application callable for lifespan protocol, "
+                "proceeding anyway",
+                exc_info=True,
+            )
+            # If, prior to the crash, the application had not completed startup,
+            # complete it now, successfully.
+            if local_state in {_State.PRE_START, _State.STARTING}:
+                self._started(None)
+                local_state = _State.RUNNING
+            # If the application had not already waited for the shutdown signal, wait
+            # for it now.
+            if local_state is _State.RUNNING:
+                await self._shutting_down()
+                local_state = _State.STOPPING
+            # If the application had not completed shutdown, complete it now,
+            # successfully.
+            if local_state is _State.STOPPING:
+                self._shutdown_complete(None)
 
     async def _receive(self) -> EventOrScope:
         """Receive the next lifespan event."""
-        async with self._receive_mutex:
-            return await anext(self._receive_iter)
+        while True:
+            ret = await self._try_receive()
+            if ret is not None:
+                return ret
+
+    async def _try_receive(self) -> EventOrScope | None:
+        """
+        Try to receive a lifespan event.
+
+        :return: The event, or None if this method needs to be called again.
+        """
+        match self._state:
+            case _State.PRE_START:
+                # Give the application the startup event.
+                self._state = _State.STARTING
+                return {"type": "lifespan.startup"}
+            case _State.STARTING | _State.RUNNING:
+                # Wait until shutdown is initiated.
+                await self._shutting_down()
+                # The I/O library promises not to let _shutting_down return until after
+                # _started has been called. The call to _send that calls _started will
+                # change _state to something that is not STARTING, so if it is still
+                # STARTING now, then the I/O library broke that promise.
+                assert self._state is not _State.STARTING
+                # Most likely, we should return the shutdown event now. However, there
+                # are two cases in which we should not:
+                # 1. The application spawned an additional task from the lifespan
+                #    handler. Then, two tasks (either two spawned tasks or one spawned
+                #    task and the lifespan handler itself) both called _receive at the
+                #    same time. The lifespan.shutdown event should only be received by
+                #    one of them. That will be whichever one gets scheduled first. That
+                #    task will change _state to STOPPING in addition to returning the
+                #    lifespan.shutdown event. Then the second task will be scheduled,
+                #    which will see _state as *not* being STARTING or RUNNING any more,
+                #    and should *not* return lifespan.shutdown because that would be a
+                #    second copy of the event.
+                # 2. The application spawned an additional task from the lifespan
+                #    handler which called _receive, then the lifespan handler crashed.
+                #    The crash will have changed _state to CRASHED. According to the
+                #    ASGI specification, in this case, “the server must continue but not
+                #    send any lifespan events.” Therefore, we must not return
+                #    lifespan.shutdown here in that case.
+                # In those two cases, we will return None, causing _try_receive to be
+                # called again at which point we will re-evaluate the situation.
+                if self._state is _State.RUNNING:
+                    self._state = _State.STOPPING
+                    return {"type": "lifespan.shutdown"}
+                return None
+            case _State.STOPPING | _State.STOPPED | _State.CRASHED:
+                # No more events should be received in any of these states.
+                await self._never
+                raise NotImplementedError
 
     async def _send(self, event: EventOrScope) -> None:
-        event_type = event["type"]
-        assert isinstance(event_type, str)
-        (proto, stage, outcome) = event_type.split(".")
-        if (
-            proto != "lifespan"
-            or stage not in {"startup", "shutdown"}
-            or outcome not in {"complete", "failed"}
-        ):
-            msg = (
-                f"Unrecognized event type {event_type}, expected "
-                "lifespan.{startup,shutdown}.{complete,failed}"
-            )
-            raise ValueError(msg)
+        """
+        Send a lifespan event.
 
-        if outcome == "complete":
+        :param event: The event object.
+        """
+        event_type = event["type"]
+        if not isinstance(event_type, str):
+            msg = f"type key is of type {type(event_type)}, expected str"
+            raise TypeError(msg)
+
+        if event_type.endswith(".complete"):
             error_message = None
         else:
             error_message = event.get("message", "")
@@ -234,24 +208,75 @@ class _Manager:
                 raise TypeError(msg)
         assert isinstance(error_message, str | type(None))
 
-        if stage == "startup":
-            if self._started_called:
-                msg = "lifespan.startup.{complete,failed} sent multiple times"
+        match self._state:
+            case _State.PRE_START:
+                msg = f"Event {event_type} sent before receiving lifespan.startup"
                 raise ValueError(msg)
-            self._started_called = True
-            self._started(error_message)
-        else:
-            if self._shutdown_complete_called:
-                msg = "lifespan.shutdown.{complete,failed} sent multiple times"
+            case _State.STARTING:
+                self._send_starting(event_type, error_message)
+            case _State.RUNNING:
+                msg = (
+                    f"Event {event_type} sent after lifespan.startup.complete but "
+                    "before receiving lifespan.shutdown"
+                )
                 raise ValueError(msg)
-            self._shutdown_complete_called = True
-            self._shutdown_complete(error_message)
+            case _State.STOPPING:
+                self._send_stopping(event_type, error_message)
+            case _State.STOPPED:
+                msg = (
+                    f"Event {event_type} sent after lifespan.shutdown.complete or "
+                    "lifespan.shutdown.failed"
+                )
+                raise ValueError(msg)
+            case _State.CRASHED:
+                # Ignore all events in this state.
+                pass
+
+    def _send_starting(self, event_type: str, error_message: str | None) -> None:
+        """
+        Send a lifespan event in _State.STARTING.
+
+        :param event_type: The event type.
+        :param error_message: The error message, or None if :param event_type: is a
+            complete event.
+        """
+        match event_type:
+            case "lifespan.startup.complete":
+                self._state = _State.RUNNING
+                self._started(None)
+            case "lifespan.startup.failed":
+                self._state = _State.STOPPED
+                self._started(error_message)
+            case _:
+                msg = (
+                    f"Event {event_type} sent during startup, expected one of "
+                    "lifespan.startup.complete or lifespan.startup.failed"
+                )
+                raise ValueError(msg)
+
+    def _send_stopping(self, event_type: str, error_message: str | None) -> None:
+        """
+        Send a lifespan event in _State.STOPPING.
+
+        :param event_type: The event type.
+        :param error_message: The error message, or None if :param event_type: is a
+            complete event.
+        """
+        match event_type:
+            case "lifespan.shutdown.complete" | "lifespan.shutdown.failed":
+                self._state = _State.STOPPED
+                self._shutdown_complete(error_message)
+            case _:
+                msg = (
+                    f"Event {event_type} sent during shutdown, expected one of "
+                    "lifespan.shutdown.complete or lifespan.shutdown.failed"
+                )
+                raise ValueError(msg)
 
 
 async def run(
     container: Container,
     never: Awaitable[None],
-    mutex: AbstractAsyncContextManager[Any],
     started: Callable[[str | None], None],
     shutting_down: Callable[[], Awaitable[Any]],
     shutdown_complete: Callable[[str | None], None],
@@ -285,9 +310,6 @@ async def run(
 
     :param container: The ASGI container.
     :param never: An awaitable that will never complete.
-    :param mutex: A mutex (async context manager that can only be entered by one
-        task at a time) that the lifespan manager can use internally and that is not
-        used by the caller in any way.
     :param started: A callable that is invoked once the application has started up,
         passing the failure message if startup failed or None if startup succeeded. This
         callable is invoked on whatever task the application uses to send the
@@ -303,7 +325,6 @@ async def run(
     await _Manager(
         container,
         never,
-        mutex,
         started,
         shutting_down,
         shutdown_complete,

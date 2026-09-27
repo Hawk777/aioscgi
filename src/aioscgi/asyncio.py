@@ -342,7 +342,6 @@ async def _main_coroutine_guarded(
             lifespan.run(
                 container,
                 loop.create_future(),
-                asyncio.Lock(),
                 functools.partial(
                     _complete_lifespan_future,
                     lifespan_started,

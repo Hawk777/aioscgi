@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import http
 import logging
 import urllib.parse
 import wsgiref.util
@@ -13,6 +12,7 @@ from typing import Any
 import sioscgi.request
 import sioscgi.response
 
+from .common import encode_response_start
 from .container import Container
 from .types import EventOrScope, Socket
 
@@ -94,20 +94,6 @@ def _calc_client(environ: dict[str, bytes]) -> list[Any] | None:
             return None
     else:
         return None
-
-
-def _calc_status(status: int) -> str:
-    """
-    Generate the HTTP status string.
-
-    :param status: The status code.
-    :returns: The status line including the reason phrase.
-    """
-    try:
-        phrase = http.HTTPStatus(status).phrase
-    except ValueError:
-        phrase = "Unknown Status"
-    return f"{status} {phrase}"
 
 
 def _make_scope(
@@ -366,22 +352,7 @@ class _Connection:
     async def _send(self, event: EventOrScope) -> None:
         event_type = event["type"]
         if event_type == "http.response.start":
-            status_code = event["status"]
-            assert isinstance(status_code, int)
-            headers = event["headers"]
-            assert isinstance(headers, list)
-            string_headers = (
-                (k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers
-            )
-            # The ASGI specification says the application is allowed to send
-            # Transfer-Encoding and the container is required to ignore it.
-            filtered_headers = [
-                (k, v) for k, v in string_headers if k.lower() != "transfer-encoding"
-            ]
-            encoded = sioscgi.response.Headers(
-                _calc_status(status_code),
-                filtered_headers,
-            )
+            encoded = encode_response_start(event)
             if self._writer_pending_headers is not None:
                 # We want to report the problem immediately, but really it’s an SCGI
                 # state machine error and therefore “should” be sioscgi’s job to report.

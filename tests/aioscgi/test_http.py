@@ -14,7 +14,7 @@ import sioscgi.request
 import sioscgi.response
 
 from aioscgi.container import Container
-from aioscgi.http import Connection
+from aioscgi.http import run
 from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction, Socket
 
 
@@ -210,7 +210,7 @@ def run_test(
             read_chunk.return_value = b""
         else:
             read_chunk.side_effect = NotImplementedError
-        coro = Connection(container, _Socket(read_chunk)).run()
+        coro = run(container, _Socket(read_chunk))
         assert isinstance(coro, Coroutine)
         with pytest.raises(StopIteration):
             coro.send(None)

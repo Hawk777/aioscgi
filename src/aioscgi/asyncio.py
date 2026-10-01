@@ -15,9 +15,8 @@ from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from contextlib import AbstractAsyncContextManager
 from typing import override
 
-from . import lifespan
+from . import http, lifespan
 from .container import Container
-from .http import Connection
 from .tcp import TCPAddress
 from .types import Socket, StartStopListener
 
@@ -67,9 +66,9 @@ class _ConnectionHandler:
     """
     A handler for incoming connections.
 
-    This handler handles creating a Connection object for each connection and running
-    it, closing the connection once the application callable is finished, and tracking
-    the set of running connection-handling tasks.
+    This handler handles creating a task for each connection and running it, closing the
+    connection once the application callable is finished, and tracking the set of
+    running connection-handling tasks.
     """
 
     __slots__ = {
@@ -115,7 +114,7 @@ class _ConnectionHandler:
         :param writer: The write half of the connection.
         """
         try:
-            return await Connection(self._container, _Socket(reader, writer)).run()
+            return await http.run(self._container, _Socket(reader, writer))
         finally:
             writer.close()
             with contextlib.suppress(BrokenPipeError, ConnectionResetError):

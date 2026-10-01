@@ -219,7 +219,7 @@ def _make_scope(
     }
 
 
-class Connection:
+class _Connection:
     """
     The handler for one accepted connection.
 
@@ -259,7 +259,7 @@ class Connection:
 
     def __init__(self, container: Container, socket: Socket) -> None:
         """
-        Construct a new Connection.
+        Construct a new _Connection.
 
         :param container: The ASGI container.
         :param socket: The incoming connected socket.
@@ -460,3 +460,13 @@ class Connection:
                 logging.getLogger(__name__).debug("SCGI socket broken on write")
                 self._disconnected = True
                 raise _ConnectionClosedError from exp
+
+
+async def run(container: Container, socket: Socket) -> None:
+    """
+    Handle an SCGI connection.
+
+    :param container: The ASGI container.
+    :param socket: The incoming connected socket.
+    """
+    return await _Connection(container, socket).run()

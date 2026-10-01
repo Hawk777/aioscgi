@@ -114,8 +114,12 @@ class _Socket(Socket):
         return ret
 
     @override
-    async def write_chunk(self, _data: bytes, _drain: bool) -> None:
+    def write_chunk(self, _data: bytes) -> None:
         raise NotImplementedError
+
+    @override
+    async def drain_write(self) -> None:
+        pass
 
 
 def run_test(

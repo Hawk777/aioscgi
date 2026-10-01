@@ -237,7 +237,6 @@ class _Connection:
         "_request_ended": "Whether the end of the request has been received.",
         "_socket": "The socket.",
         "_writer": "The SCGI protocol response state machine.",
-        "_writer_mutex": "A mutex held by the task calling _send.",
         "_writer_pending_headers": """
             The pending response headers.
 
@@ -254,7 +253,6 @@ class _Connection:
     _request_ended: bool
     _socket: Socket
     _writer: sioscgi.response.SCGIWriter
-    _writer_mutex: AbstractAsyncContextManager[None]
     _writer_pending_headers: sioscgi.response.Headers | None
 
     def __init__(self, container: Container, socket: Socket) -> None:
@@ -271,7 +269,6 @@ class _Connection:
         self._request_ended = False
         self._socket = socket
         self._writer = sioscgi.response.SCGIWriter()
-        self._writer_mutex = socket.create_mutex()
         self._writer_pending_headers = None
 
     async def run(self) -> None:
@@ -367,77 +364,69 @@ class _Connection:
                     return {"type": "http.disconnect"}
 
     async def _send(self, event: EventOrScope) -> None:
-        async with self._writer_mutex:
-            event_type = event["type"]
-            if event_type == "http.response.start":
-                status_code = event["status"]
-                assert isinstance(status_code, int)
-                headers = event["headers"]
-                assert isinstance(headers, list)
-                string_headers = (
-                    (k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers
+        event_type = event["type"]
+        if event_type == "http.response.start":
+            status_code = event["status"]
+            assert isinstance(status_code, int)
+            headers = event["headers"]
+            assert isinstance(headers, list)
+            string_headers = (
+                (k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers
+            )
+            # The ASGI specification says the application is allowed to send
+            # Transfer-Encoding and the container is required to ignore it.
+            filtered_headers = [
+                (k, v) for k, v in string_headers if k.lower() != "transfer-encoding"
+            ]
+            encoded = sioscgi.response.Headers(
+                _calc_status(status_code),
+                filtered_headers,
+            )
+            if self._writer_pending_headers is not None:
+                # We want to report the problem immediately, but really it’s an SCGI
+                # state machine error and therefore “should” be sioscgi’s job to report.
+                # However, sioscgi can’t be responsible, because we’re holding the
+                # response headers back until the first body part and therefore sioscgi
+                # never actually sees anything. Just pretend.
+                raise sioscgi.response.BadEventInStateError(
+                    sioscgi.response.Headers,
+                    self._writer.state,
                 )
-                # The ASGI specification says the application is allowed to send
-                # Transfer-Encoding and the container is required to ignore it.
-                filtered_headers = [
-                    (k, v)
-                    for k, v in string_headers
-                    if k.lower() != "transfer-encoding"
-                ]
-                encoded = sioscgi.response.Headers(
-                    _calc_status(status_code),
-                    filtered_headers,
-                )
-                if self._writer_pending_headers is not None:
-                    # We want to report the problem immediately, but really it’s an SCGI
-                    # state machine error and therefore “should” be sioscgi’s job to
-                    # report. However, sioscgi can’t be responsible, because we’re
-                    # holding the response headers back until the first body part and
-                    # therefore sioscgi never actually sees anything. Just pretend.
-                    raise sioscgi.response.BadEventInStateError(
-                        sioscgi.response.Headers,
-                        self._writer.state,
-                    )
-                self._writer_pending_headers = encoded
-            elif event_type == "http.response.body":
-                if self._writer_pending_headers is not None:
-                    await self._send_event(self._writer_pending_headers, drain=False)
-                    self._writer_pending_headers = None
-                body = event.get("body")
-                more = event.get("more_body", False)
-                assert isinstance(more, bool)
-                if body:  # is present, not None, and nonzero length
-                    assert isinstance(body, bytes)
-                    # If more=True then drain=True now. If more=False then we’re about
-                    # to drain=True in the “if not more” just below, so drain=False now
-                    # and we’ll combine draining the Body and End events.
-                    await self._send_event(sioscgi.response.Body(body), drain=more)
-                if not more:
-                    await self._send_event(sioscgi.response.End(), drain=True)
-            elif event_type == "http.response.pathsend":
-                if not self._container.x_sendfile:
-                    msg = (
-                        "Event type http.response.pathsend passed to send, but that "
-                        "extension is not enabled"
-                    )
-                    raise ValueError(msg)
-                path = event["path"]
-                assert isinstance(path, str)
-                if self._writer_pending_headers is None:
-                    msg = (
-                        "Event type http.response.pathsend passed to send without "
-                        "previous http.response.start, or with previous "
-                        "http.response.body"
-                    )
-                    raise ValueError(msg)
-                old_headers = self._writer_pending_headers
+            self._writer_pending_headers = encoded
+        elif event_type == "http.response.body":
+            if self._writer_pending_headers is not None:
+                self._send_event(self._writer_pending_headers)
                 self._writer_pending_headers = None
-                old_headers.other_headers["X-Sendfile"] = urllib.parse.quote(path, "")
-                await self._send_event(old_headers, drain=False)
-                await self._send_event(sioscgi.response.End(), drain=True)
-            else:
-                msg = f"Unknown event type {event_type!r} passed to send"
+            body = event.get("body")
+            if body:  # is present, not None, and nonzero length
+                assert isinstance(body, bytes)
+                self._send_event(sioscgi.response.Body(body))
+            if not event.get("more_body", False):
+                self._send_event(sioscgi.response.End())
+        elif event_type == "http.response.pathsend":
+            if not self._container.x_sendfile:
+                msg = (
+                    "Event type http.response.pathsend passed to send, but that "
+                    "extension is not enabled"
+                )
                 raise ValueError(msg)
+            path = event["path"]
+            assert isinstance(path, str)
+            if self._writer_pending_headers is None:
+                msg = (
+                    "Event type http.response.pathsend passed to send without previous "
+                    "http.response.start, or with previous http.response.body"
+                )
+                raise ValueError(msg)
+            old_headers = self._writer_pending_headers
+            self._writer_pending_headers = None
+            old_headers.other_headers["X-Sendfile"] = urllib.parse.quote(path, "")
+            self._send_event(old_headers)
+            self._send_event(sioscgi.response.End())
+        else:
+            msg = f"Unknown event type {event_type!r} passed to send"
+            raise ValueError(msg)
+        await self._drain_write()
 
     async def _read_chunk_wrapper(self) -> bytes:
         """
@@ -450,16 +439,20 @@ class _Connection:
         except ConnectionResetError:
             return b""
 
-    async def _send_event(self, event: sioscgi.response.Event, drain: bool) -> None:
+    def _send_event(self, event: sioscgi.response.Event) -> None:
         """Send an event to the SCGI client."""
         raw = self._writer.send(event)
         if raw:
-            try:
-                await self._socket.write_chunk(raw, drain)
-            except (BrokenPipeError, ConnectionResetError) as exp:
-                logging.getLogger(__name__).debug("SCGI socket broken on write")
-                self._disconnected = True
-                raise _ConnectionClosedError from exp
+            self._socket.write_chunk(raw)
+
+    async def _drain_write(self) -> None:
+        """Wait until enough previously written data has been passed to the OS."""
+        try:
+            await self._socket.drain_write()
+        except (BrokenPipeError, ConnectionResetError) as exp:
+            logging.getLogger(__name__).debug("SCGI socket broken on write")
+            self._disconnected = True
+            raise _ConnectionClosedError from exp
 
 
 async def run(container: Container, socket: Socket) -> None:

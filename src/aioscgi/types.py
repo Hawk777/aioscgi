@@ -79,11 +79,30 @@ class Socket(abc.ABC):
         """
 
     @abc.abstractmethod
-    async def write_chunk(self, data: bytes, drain: bool) -> None:
+    def write_chunk(self, data: bytes) -> None:
         """
         Write a chunk of bytes to the underlying connection.
 
+        This is synchronous, so it must return immediately. It should buffer the data if
+        it cannot be passed to the OS immediately; drain_write will be called soon to
+        ensure the data does not pile up excessively, but may be called only once for a
+        collection of write_chunk calls.
+
+        This method should not raise exceptions due to socket issues.
+
         :param data: The bytes to write.
-        :param drain: True if the function should wait until the data has been accepted
-            by the kernel before returning.
+        """
+
+    @abc.abstractmethod
+    async def drain_write(self) -> None:
+        """
+        Wait until enough previously written data has been passed to the OS.
+
+        If this is not called, an unlimited amount of data may pile up in userspace
+        buffers due to write_chunk calls.
+
+        This may be called by multiple tasks simultaneously.
+
+        If the socket experiences a problem, it should be raised as an exception from
+        this method.
         """

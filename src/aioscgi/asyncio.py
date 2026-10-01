@@ -56,10 +56,12 @@ class _Socket(Socket):
         return await self._reader.read(io.DEFAULT_BUFFER_SIZE)
 
     @override
-    async def write_chunk(self, data: bytes, drain: bool) -> None:
+    def write_chunk(self, data: bytes) -> None:
         self._writer.write(data)
-        if drain:
-            await self._writer.drain()
+
+    @override
+    async def drain_write(self) -> None:
+        await self._writer.drain()
 
 
 class _ConnectionHandler:

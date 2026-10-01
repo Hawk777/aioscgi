@@ -15,39 +15,38 @@ from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from contextlib import AbstractAsyncContextManager
 from typing import override
 
-from . import http, lifespan
+from . import lifespan
 from .container import Container
+from .http import Connection
 from .tcp import TCPAddress
-from .types import StartStopListener
+from .types import Socket, StartStopListener
 
 
-class Connection(http.Connection):
+class _Socket(Socket):
     """An HTTP connection over asyncio."""
 
     __slots__ = {
-        "_stream_reader": "The stream reader for the connection.",
-        "_stream_writer": "The stream writer for the connection.",
+        "_reader": "The stream reader for the connection.",
+        "_writer": "The stream writer for the connection.",
     }
 
-    _stream_reader: asyncio.StreamReader
-    _stream_writer: asyncio.StreamWriter
+    _reader: asyncio.StreamReader
+    _writer: asyncio.StreamWriter
 
     def __init__(
         self,
-        container: Container,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
         """
-        Construct a new Connection.
+        Construct a new _Socket.
 
-        :param container: The ASGI container.
         :param reader: The read half of the connection.
         :param writer: The write half of the connection.
         """
-        super().__init__(container)
-        self._stream_reader = reader
-        self._stream_writer = writer
+        super().__init__()
+        self._reader = reader
+        self._writer = writer
 
     @override
     def create_mutex(self) -> AbstractAsyncContextManager[None]:
@@ -55,13 +54,13 @@ class Connection(http.Connection):
 
     @override
     async def read_chunk(self) -> bytes:
-        return await self._stream_reader.read(io.DEFAULT_BUFFER_SIZE)
+        return await self._reader.read(io.DEFAULT_BUFFER_SIZE)
 
     @override
     async def write_chunk(self, data: bytes, drain: bool) -> None:
-        self._stream_writer.write(data)
+        self._writer.write(data)
         if drain:
-            await self._stream_writer.drain()
+            await self._writer.drain()
 
 
 class _ConnectionHandler:
@@ -116,7 +115,7 @@ class _ConnectionHandler:
         :param writer: The write half of the connection.
         """
         try:
-            return await Connection(self._container, reader, writer).run()
+            return await Connection(self._container, _Socket(reader, writer)).run()
         # We don’t want to crash the whole server, and the exception is being logged.
         # pylint: disable-next=broad-exception-caught
         except Exception:

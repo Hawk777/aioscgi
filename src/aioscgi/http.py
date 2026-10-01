@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import abc
 import http
 import logging
 import urllib.parse
@@ -15,7 +14,7 @@ import sioscgi.request
 import sioscgi.response
 
 from .container import Container
-from .types import EventOrScope
+from .types import EventOrScope, Socket
 
 
 class _ConnectionClosedError(BrokenPipeError):
@@ -220,7 +219,7 @@ def _make_scope(
     }
 
 
-class Connection(abc.ABC):
+class Connection:
     """
     The handler for one accepted connection.
 
@@ -236,6 +235,7 @@ class Connection(abc.ABC):
         "_reader": "The SCGI protocol request state machine.",
         "_reader_mutex": "A mutex held by the task calling _receive.",
         "_request_ended": "Whether the end of the request has been received.",
+        "_socket": "The socket.",
         "_writer": "The SCGI protocol response state machine.",
         "_writer_mutex": "A mutex held by the task calling _send.",
         "_writer_pending_headers": """
@@ -252,55 +252,27 @@ class Connection(abc.ABC):
     _reader: sioscgi.request.SCGIReader
     _reader_mutex: AbstractAsyncContextManager[None]
     _request_ended: bool
+    _socket: Socket
     _writer: sioscgi.response.SCGIWriter
     _writer_mutex: AbstractAsyncContextManager[None]
     _writer_pending_headers: sioscgi.response.Headers | None
 
-    def __init__(self, container: Container) -> None:
+    def __init__(self, container: Container, socket: Socket) -> None:
         """
         Construct a new Connection.
 
         :param container: The ASGI container.
+        :param socket: The incoming connected socket.
         """
         self._container = container
         self._disconnected = False
         self._reader = sioscgi.request.SCGIReader()
-        self._reader_mutex = self.create_mutex()
+        self._reader_mutex = socket.create_mutex()
         self._request_ended = False
+        self._socket = socket
         self._writer = sioscgi.response.SCGIWriter()
-        self._writer_mutex = self.create_mutex()
+        self._writer_mutex = socket.create_mutex()
         self._writer_pending_headers = None
-
-    @abc.abstractmethod
-    def create_mutex(self) -> AbstractAsyncContextManager[None]:
-        """
-        Create a mutex.
-
-        :return: An object that can be used as an asynchronous context manager, such
-            that only one async task can be within the context at a time.
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    async def read_chunk(self) -> bytes:
-        """
-        Read a chunk of bytes from the underlying connection.
-
-        :return: The bytes, or a zero-length bytes object if the underlying connection
-            has reached EOF.
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    async def write_chunk(self, data: bytes, drain: bool) -> None:
-        """
-        Write a chunk of bytes to the underlying connection.
-
-        :param data: The bytes to write.
-        :param drain: True if the function should wait until the data has been accepted
-            by the kernel before returning.
-        """
-        raise NotImplementedError
 
     async def run(self) -> None:
         """
@@ -474,7 +446,7 @@ class Connection(abc.ABC):
         A ConnectionResetError is translated into an EOF.
         """
         try:
-            return await self.read_chunk()
+            return await self._socket.read_chunk()
         except ConnectionResetError:
             return b""
 
@@ -483,7 +455,7 @@ class Connection(abc.ABC):
         raw = self._writer.send(event)
         if raw:
             try:
-                await self.write_chunk(raw, drain)
+                await self._socket.write_chunk(raw, drain)
             except (BrokenPipeError, ConnectionResetError) as exp:
                 logging.getLogger(__name__).debug("SCGI socket broken on write")
                 self._disconnected = True

@@ -13,9 +13,9 @@ import pytest
 import sioscgi.request
 import sioscgi.response
 
-from aioscgi import http
 from aioscgi.container import Container
-from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
+from aioscgi.http import Connection
+from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction, Socket
 
 
 class EventMatcher:
@@ -76,9 +76,9 @@ class EventMatcher:
         return repr(self._expected)
 
 
-class Connection(http.Connection):
+class _Socket(Socket):
     """
-    A mock Connection.
+    A mock Socket.
 
     create_mutex works properly. read_chunk delegates to a mock, provided when the
     object was constructed. write_chunk always fails (expecting not to be called).
@@ -92,16 +92,15 @@ class Connection(http.Connection):
 
     def __init__(
         self,
-        container: Container,
         read_chunk_call: MagicMock,
     ) -> None:
         """
-        Create a new Connection.
+        Create a new _Socket.
 
         :param container: The ASGI container.
         :param read_chunk_call: The mock to use to implement read_chunk.
         """
-        super().__init__(container)
+        super().__init__()
         self._read_chunk_call = read_chunk_call
 
     @override
@@ -153,9 +152,9 @@ def run_test(
         receiving all of :param expected_messages:.
     :param extra_reader_calls: Extra function calls performed on the reader after :param
         read_events:.
-    :param read_returns_eof: True if Connection.read_chunk should return EOF (zero
-        bytes), or False if Connection.read_chunk should raise NotImplementedError (it
-        is not expected to be called at all).
+    :param read_returns_eof: True if Socket.read_chunk should return EOF (zero bytes),
+        or False if Socket.read_chunk should raise NotImplementedError (it is not
+        expected to be called at all).
     :param scheme: The scheme that the app should see in the scope.
     :param x_sendfile: Whether to enable X-Sendfile in the container.
     """
@@ -211,7 +210,7 @@ def run_test(
             read_chunk.return_value = b""
         else:
             read_chunk.side_effect = NotImplementedError
-        coro = Connection(container, read_chunk).run()
+        coro = Connection(container, _Socket(read_chunk)).run()
         assert isinstance(coro, Coroutine)
         with pytest.raises(StopIteration):
             coro.send(None)

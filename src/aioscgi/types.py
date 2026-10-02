@@ -56,6 +56,10 @@ class Socket(abc.ABC):
     instance of an I/O-adapter-specific subclass of this class (in a common task or in a
     dedicated per-connection task), which is then passed to the appropriate protocol
     handling routine.
+
+    Because an instance of this class is the only thing provided by the I/O adapter to
+    the protocol handler, it also contains a few I/O-adapter-specific utility methods
+    that are not strictly part of socket handling.
     """
 
     __slots__ = ()

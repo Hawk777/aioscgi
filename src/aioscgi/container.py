@@ -19,12 +19,14 @@ class Container:
         "application": "The application callable.",
         "base_uri": "The base URI prefix.",
         "state": "The application state dictionary.",
+        "websocket": "Whether to enable websocket.",
         "x_sendfile": "Whether to enable http.response.pathsend via X-Sendfile.",
     }
 
     application: ApplicationType
     base_uri: str | None
     state: dict[Any, Any]
+    websocket: bool
     x_sendfile: bool
 
     def __init__(
@@ -32,6 +34,7 @@ class Container:
         application: ApplicationType,
         base_uri: str | None,
         *,
+        websocket: bool = False,
         x_sendfile: bool = False,
     ) -> None:
         """
@@ -42,8 +45,10 @@ class Container:
             computing root_path and path, or None to use SCRIPT_NAME and PATH_INFO
             instead.
         :param x_sendfile: Whether to enable http.response.pathsend via X-Sendfile.
+        :param websocket: Whether to enable websocket.
         """
         self.application = application
         self.base_uri = base_uri
         self.state = {}
+        self.websocket = websocket
         self.x_sendfile = x_sendfile

@@ -12,6 +12,7 @@ from typing import Any
 import sioscgi.request
 import sioscgi.response
 
+from . import websocket
 from .common import encode_response_start
 from .container import Container
 from .types import EventOrScope, Socket
@@ -241,7 +242,11 @@ class _Connection:
     _writer: sioscgi.response.SCGIWriter
     _writer_pending_headers: sioscgi.response.Headers | None
 
-    def __init__(self, container: Container, socket: Socket) -> None:
+    def __init__(
+        self,
+        container: Container,
+        socket: Socket,
+    ) -> None:
         """
         Construct a new _Connection.
 
@@ -288,6 +293,14 @@ class _Connection:
         # Build a scope dictionary.
         scope: EventOrScope | None = _make_scope(self._container, environ)
         if scope is None:
+            return
+
+        # Try running as websocket, if enabled.
+        if self._container.websocket and await websocket.run(
+            self._container,
+            self._socket,
+            scope,
+        ):
             return
 
         # Run the application.

@@ -1,6 +1,7 @@
 """The application entry point."""
 
 import argparse
+import contextlib
 import importlib
 import importlib.metadata
 import json
@@ -149,11 +150,15 @@ def find_extra_sockets(systemd: bool) -> Iterable[socket.socket]:
     return socks
 
 
-def make_arg_parser(io_adapters: Collection[str]) -> argparse.ArgumentParser:
+def make_arg_parser(
+    io_adapters: Collection[str],
+    can_websocket: bool,
+) -> argparse.ArgumentParser:
     """
     Create the command line argument parser.
 
     :param io_adapters: The possible choices of I/O adapters.
+    :param can_websocket: Whether to offer the option of enabling websocket support.
     """
     parser = argparse.ArgumentParser(
         description="Run an ASGI application under asyncio.",
@@ -188,6 +193,12 @@ def make_arg_parser(io_adapters: Collection[str]) -> argparse.ArgumentParser:
             "closing them forcefully (default: %(default).1f)"
         ),
     )
+    if can_websocket:
+        group.add_argument(
+            "--websocket",
+            action="store_true",
+            help="enable support for the websocket protocol",
+        )
     group.add_argument(
         "--x-sendfile",
         action="store_true",
@@ -262,13 +273,20 @@ def main() -> None:
             for entry in importlib.metadata.entry_points(group="aioscgi.io")
         }
 
+        # Check whether wsproto is installed.
+        can_websocket = False
+        with contextlib.suppress(importlib.metadata.PackageNotFoundError):
+            importlib.metadata.metadata("wsproto")
+            can_websocket = True
+
         # Parse and check command-line parameters.
-        parser = make_arg_parser(io_adapters)
+        parser = make_arg_parser(io_adapters, can_websocket)
         args = parser.parse_args()
         if not any((args.unix_socket, args.tcp, args.systemd)):
             parser.error(
                 "At least one of --unix-socket, --tcp, or --systemd must be supplied.",
             )
+        enable_websocket = can_websocket and args.websocket
 
         # Sanity check.
         if args.shutdown_timeout < 0:
@@ -322,7 +340,12 @@ def main() -> None:
 
         # Run the server.
         start_stop_listener = make_start_stop_listener(args.systemd)
-        container = Container(app_callable, args.base_uri, x_sendfile=args.x_sendfile)
+        container = Container(
+            app_callable,
+            args.base_uri,
+            websocket=enable_websocket,
+            x_sendfile=args.x_sendfile,
+        )
         adapter.run(
             args.tcp,
             args.unix_socket,

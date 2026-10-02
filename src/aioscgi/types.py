@@ -74,6 +74,17 @@ class Socket(abc.ABC):
         """
 
     @abc.abstractmethod
+    def create_one_shot(
+        self,
+    ) -> tuple[Callable[[], None], Callable[[], Awaitable[Any]]]:
+        """
+        Create a one-shot notification object.
+
+        :return: A notify function, and a wait function that, when called, waits until
+            the notify function is called.
+        """
+
+    @abc.abstractmethod
     async def read_chunk(self) -> bytes:
         """
         Read a chunk of bytes from the underlying connection.

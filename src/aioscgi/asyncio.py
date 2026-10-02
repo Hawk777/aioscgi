@@ -13,7 +13,7 @@ import socket
 import sys
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from contextlib import AbstractAsyncContextManager
-from typing import override
+from typing import Any, override
 
 from . import http, lifespan
 from .container import Container
@@ -50,6 +50,13 @@ class _Socket(Socket):
     @override
     def create_mutex(self) -> AbstractAsyncContextManager[None]:
         return asyncio.Lock()
+
+    @override
+    def create_one_shot(
+        self,
+    ) -> tuple[Callable[[], None], Callable[[], Awaitable[Any]]]:
+        event = asyncio.Event()
+        return (event.set, event.wait)
 
     @override
     async def read_chunk(self) -> bytes:

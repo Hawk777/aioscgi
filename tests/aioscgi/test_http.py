@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import wsgiref.headers
-from collections.abc import Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from contextlib import AbstractAsyncContextManager
-from typing import override
+from typing import Any, override
 from unittest.mock import MagicMock, _Call, call
 
 import pytest
@@ -106,6 +106,13 @@ class _Socket(Socket):
     @override
     def create_mutex(self) -> AbstractAsyncContextManager[None]:
         return asyncio.Lock()
+
+    @override
+    def create_one_shot(
+        self,
+    ) -> tuple[Callable[[], None], Callable[[], Awaitable[Any]]]:
+        event = asyncio.Event()
+        return (event.set, event.wait)
 
     @override
     async def read_chunk(self) -> bytes:

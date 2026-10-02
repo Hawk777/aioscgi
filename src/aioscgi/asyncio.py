@@ -173,6 +173,16 @@ def _set_two_events(e1: asyncio.Event, e2: asyncio.Event) -> None:
     e2.set()
 
 
+async def _wait_for_event(e: asyncio.Event) -> None:
+    """
+    Wait for an event.
+
+    This adapter exists to give a return type of None, while the underlying Event.wait’s
+    return type is bool.
+    """
+    await e.wait()
+
+
 async def _main_coroutine(
     start_server_fn: Callable[
         [Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]],
@@ -343,7 +353,7 @@ async def _main_coroutine_guarded(
                     lifespan_started,
                     _LifespanStartError,
                 ),
-                lifespan_shutting_down.wait,
+                functools.partial(_wait_for_event, lifespan_shutting_down),
                 functools.partial(
                     _complete_lifespan_future,
                     lifespan_shutdown_complete,

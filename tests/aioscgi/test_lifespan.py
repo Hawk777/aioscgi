@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 
 import pytest
 
 from aioscgi.container import Container
 from aioscgi.lifespan import run
 from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
+
+
+async def _wait_for_event(e: asyncio.Event) -> None:
+    """
+    Wait for an event.
+
+    This adapter exists to give a return type of None, while the underlying Event.wait’s
+    return type is bool.
+    """
+    await e.wait()
 
 
 @pytest.mark.asyncio
@@ -46,7 +57,7 @@ async def test_lifespan_startup_successful() -> None:
         Container(app, None),
         loop.create_future(),
         started,
-        asyncio.Event().wait,
+        functools.partial(_wait_for_event, asyncio.Event()),
         shutdown_complete,
     )
 
@@ -106,7 +117,7 @@ async def test_lifespan_startup_failed() -> None:
         Container(app, None),
         loop.create_future(),
         started,
-        asyncio.Event().wait,
+        functools.partial(_wait_for_event, asyncio.Event()),
         shutdown_complete,
     )
 
@@ -169,7 +180,7 @@ async def test_lifespan_shutdown_successful() -> None:
         Container(app, None),
         loop.create_future(),
         started,
-        shutting_down.wait,
+        functools.partial(_wait_for_event, shutting_down),
         shutdown_complete,
     )
 
@@ -240,7 +251,7 @@ async def test_lifespan_shutdown_failed() -> None:
         Container(app, None),
         loop.create_future(),
         started,
-        shutting_down.wait,
+        functools.partial(_wait_for_event, shutting_down),
         shutdown_complete,
     )
 
@@ -306,7 +317,7 @@ async def test_lifespan_not_supported() -> None:
         Container(app, None),
         loop.create_future(),
         started,
-        shutting_down.wait,
+        functools.partial(_wait_for_event, shutting_down),
         shutdown_complete,
     )
 

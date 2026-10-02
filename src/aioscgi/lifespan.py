@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Never
 
 from .container import Container
 from .types import EventOrScope
@@ -51,7 +51,7 @@ class _Manager:
     }
 
     _container: Container
-    _never: Awaitable[None]
+    _never: Awaitable[Never]
     _started: Callable[[str | None], None]
     _shutting_down: Callable[[], Awaitable[Any]]
     _shutdown_complete: Callable[[str | None], None]
@@ -60,7 +60,7 @@ class _Manager:
     def __init__(
         self,
         container: Container,
-        never: Awaitable[None],
+        never: Awaitable[Never],
         started: Callable[[str | None], None],
         shutting_down: Callable[[], Awaitable[Any]],
         shutdown_complete: Callable[[str | None], None],
@@ -277,7 +277,7 @@ class _Manager:
 
 async def run(
     container: Container,
-    never: Awaitable[None],
+    never: Awaitable[Never],
     started: Callable[[str | None], None],
     shutting_down: Callable[[], Awaitable[Any]],
     shutdown_complete: Callable[[str | None], None],

@@ -186,7 +186,8 @@ class _Manager:
             case _State.STOPPING | _State.STOPPED | _State.CRASHED:
                 # No more events should be received in any of these states.
                 await self._never
-                raise NotImplementedError
+                msg = "Never future completed"
+                raise RuntimeError(msg)
 
     async def _send(self, event: EventOrScope) -> None:
         """

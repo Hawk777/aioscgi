@@ -305,7 +305,7 @@ async def run(
     8.  The adapter causes any current and/or future awaits of shutting_down to return.
     9.  The adapter waits until the shutdown_complete callable is invoked. If an error
         message was provided, that message should be reported.
-    10. The adapter waits until the task which called  this function completes.
+    10. The adapter waits until the task which called this function completes.
 
     The callables will be invoked directly in the task that called this function.
 

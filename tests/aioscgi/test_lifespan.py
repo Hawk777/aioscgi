@@ -347,3 +347,43 @@ async def test_lifespan_not_supported() -> None:
 
     # The lifespan manager should return promptly after shutdown.
     await uut_future
+
+
+@pytest.mark.asyncio
+async def test_lifespan_receive_after_shutdown() -> None:
+    """
+    Test that trying to receive after receiving lifespan.shutdown raises an exception.
+
+    This is in compliance with
+    <https://github.com/django/asgiref/issues/595#issuecomment-5971204973>.
+    """
+    done = False
+
+    async def app(
+        _scope: EventOrScope,
+        receive: ReceiveFunction,
+        send: SendFunction,
+    ) -> None:
+        nonlocal done
+        event = await receive()
+        assert event["type"] == "lifespan.startup"
+        await send({"type": "lifespan.startup.complete"})
+        event = await receive()
+        assert event["type"] == "lifespan.shutdown"
+        with pytest.raises(RuntimeError):
+            await receive()
+        done = True
+
+    async def anop() -> None:
+        pass
+
+    loop = asyncio.get_running_loop()
+    uut = run(
+        Container(app, None),
+        loop.create_future(),
+        lambda _: None,
+        anop,
+        lambda _: None,
+    )
+    await asyncio.create_task(uut)
+    assert done

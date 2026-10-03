@@ -183,8 +183,18 @@ class _Manager:
                     self._state = _State.STOPPING
                     return {"type": "lifespan.shutdown"}
                 return None
-            case _State.STOPPING | _State.STOPPED | _State.CRASHED:
-                # No more events should be received in any of these states.
+            case _State.STOPPING | _State.STOPPED:
+                # According to
+                # <https://github.com/django/asgiref/issues/595#issuecomment-5971204973>,
+                # the application should not call receive again after receiving the
+                # final event of a protocol (i.e. lifespan.shutdown). Therefore, if it
+                # does so, it’s buggy.
+                msg = "receive called after receiving lifespan.shutdown"
+                raise RuntimeError(msg)
+            case _State.CRASHED:
+                # “If an exception is raised when calling the application callable with
+                # a lifespan.startup message or a scope with type lifespan, the server
+                # must continue but not send any lifespan events.”
                 await self._never
                 msg = "Never future completed"
                 raise RuntimeError(msg)

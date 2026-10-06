@@ -204,7 +204,7 @@ async def _main_coroutine(
     """
     # Create the termination event and hook up the signal handlers, if signals are
     # supported.
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     term_event = asyncio.Event()
     quit_event = asyncio.Event()
     if hasattr(loop, "add_signal_handler"):
@@ -285,7 +285,7 @@ async def _main_coroutine_with_events(
         # protocol should have shut them down), but a poorly written application might
         # have left some background tasks running which would otherwise prevent us from
         # shutting down.
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         all_tasks = asyncio.all_tasks(loop)
         if len(all_tasks) > 1:  # If it’s just one, it’s ourself!
             logging.getLogger(__name__).warning(
@@ -340,7 +340,7 @@ async def _main_coroutine_guarded(
     """
     async with asyncio.TaskGroup() as lifespan_tg:
         # Start up the lifespan protocol.
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         lifespan_started = loop.create_future()
         lifespan_shutting_down = asyncio.Event()
         lifespan_shutdown_complete = loop.create_future()
@@ -455,7 +455,7 @@ async def _main_coroutine_with_lifespan(
                     # Start the timeout, giving connection-handling tasks a limit on how
                     # long they have to shut down.
                     timeout.reschedule(
-                        asyncio.get_event_loop().time() + shutdown_timeout,
+                        asyncio.get_running_loop().time() + shutdown_timeout,
                     )
 
                     # Wait until all the client connections finish. Each time a task

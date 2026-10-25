@@ -313,7 +313,7 @@ async def _main_coroutine_with_events(
                     "cancelled. You should use the lifespan protocol to cleanly shut "
                     "them down instead."
                 ),
-                len(all_tasks),
+                len(all_tasks) - 1,
             )
         for i in all_tasks:
             if not i.done() and i != asyncio.current_task():

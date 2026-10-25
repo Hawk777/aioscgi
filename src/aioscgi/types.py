@@ -52,6 +52,15 @@ class Adapter(abc.ABC):
     """APIs provided by a specific I/O adapter."""
 
     @abc.abstractmethod
+    def create_event(self) -> tuple[Callable[[], None], Callable[[], Awaitable[None]]]:
+        """
+        Create an event.
+
+        :return: A (set, wait) callable pair, such that calling set causes all current
+            and future awaits of awaitables returned by calls to wait to complete.
+        """
+
+    @abc.abstractmethod
     def create_mutex(self) -> AbstractAsyncContextManager[None]:
         """
         Create a mutex.

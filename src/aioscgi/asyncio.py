@@ -27,6 +27,11 @@ class _Adapter(Adapter):
     __slots__ = ()
 
     @override
+    def create_event(self) -> tuple[Callable[[], None], Callable[[], Awaitable[None]]]:
+        e = asyncio.Event()
+        return (e.set, functools.partial(_wait_for_event, e))
+
+    @override
     def create_mutex(self) -> AbstractAsyncContextManager[None]:
         return asyncio.Lock()
 

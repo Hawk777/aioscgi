@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
 import wsgiref.headers
-from collections.abc import Awaitable, Coroutine
-from contextlib import AbstractAsyncContextManager
-from typing import Never, override
+from collections.abc import Coroutine
+from typing import override
 from unittest.mock import MagicMock, _Call, call
 
 import pytest
 import sioscgi.request
 import sioscgi.response
 
+from aioscgi.asyncio import _Adapter as MockAdapter
 from aioscgi.container import Container
 from aioscgi.http import run
-from aioscgi.types import Adapter, EventOrScope, ReceiveFunction, SendFunction, Socket
+from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction, Socket
 
 
 class EventMatcher:
@@ -74,24 +73,6 @@ class EventMatcher:
     def __repr__(self) -> str:
         """Return the representation of the expected event."""
         return repr(self._expected)
-
-
-class _Adapter(Adapter):
-    """
-    A mock Adapter.
-
-    create_mutex and create_never work properly.
-    """
-
-    __slots__ = ()
-
-    @override
-    def create_mutex(self) -> AbstractAsyncContextManager[None]:
-        return asyncio.Lock()
-
-    @override
-    def create_never(self) -> Awaitable[Never]:
-        return asyncio.get_running_loop().create_future()
 
 
 class _Socket(Socket):
@@ -228,7 +209,7 @@ def run_test(
             read_chunk.return_value = b""
         else:
             read_chunk.side_effect = NotImplementedError
-        coro = run(container, _Adapter(), _Socket(read_chunk))
+        coro = run(container, MockAdapter(), _Socket(read_chunk))
         assert isinstance(coro, Coroutine)
         with pytest.raises(StopIteration):
             coro.send(None)

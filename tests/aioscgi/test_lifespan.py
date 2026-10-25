@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import functools
+from collections.abc import Awaitable
+from contextlib import AbstractAsyncContextManager
+from typing import Never, override
 
 import pytest
 
 from aioscgi.container import Container
 from aioscgi.lifespan import run
-from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
+from aioscgi.types import Adapter, EventOrScope, ReceiveFunction, SendFunction
 
 
 async def _wait_for_event(e: asyncio.Event) -> None:
@@ -20,6 +23,24 @@ async def _wait_for_event(e: asyncio.Event) -> None:
     return type is bool.
     """
     await e.wait()
+
+
+class _Adapter(Adapter):
+    """
+    A mock Adapter.
+
+    create_mutex and create_never work properly.
+    """
+
+    __slots__ = ()
+
+    @override
+    def create_mutex(self) -> AbstractAsyncContextManager[None]:
+        return asyncio.Lock()
+
+    @override
+    def create_never(self) -> Awaitable[Never]:
+        return asyncio.get_running_loop().create_future()
 
 
 @pytest.mark.asyncio
@@ -42,7 +63,6 @@ async def test_lifespan_startup_successful() -> None:
         await send({"type": "lifespan.startup.complete"})
 
     # Create the lifespan manager.
-    loop = asyncio.get_running_loop()
     started_called = False
 
     def started(error_message: str | None) -> None:
@@ -55,7 +75,7 @@ async def test_lifespan_startup_successful() -> None:
 
     uut = run(
         Container(app, None),
-        loop.create_future(),
+        _Adapter(),
         started,
         functools.partial(_wait_for_event, asyncio.Event()),
         shutdown_complete,
@@ -102,7 +122,6 @@ async def test_lifespan_startup_failed() -> None:
         await send({"type": "lifespan.startup.failed", "message": "FOO"})
 
     # Create the lifespan manager.
-    loop = asyncio.get_running_loop()
     started_called = False
 
     def started(error_message: str | None) -> None:
@@ -115,7 +134,7 @@ async def test_lifespan_startup_failed() -> None:
 
     uut = run(
         Container(app, None),
-        loop.create_future(),
+        _Adapter(),
         started,
         functools.partial(_wait_for_event, asyncio.Event()),
         shutdown_complete,
@@ -163,8 +182,6 @@ async def test_lifespan_shutdown_successful() -> None:
         await send({"type": "lifespan.shutdown.complete"})
 
     # Create the lifespan manager.
-    loop = asyncio.get_running_loop()
-
     def started(error_message: str | None) -> None:
         assert error_message is None
 
@@ -178,7 +195,7 @@ async def test_lifespan_shutdown_successful() -> None:
     shutting_down = asyncio.Event()
     uut = run(
         Container(app, None),
-        loop.create_future(),
+        _Adapter(),
         started,
         functools.partial(_wait_for_event, shutting_down),
         shutdown_complete,
@@ -234,8 +251,6 @@ async def test_lifespan_shutdown_failed() -> None:
         await send({"type": "lifespan.shutdown.failed", "message": "FOO"})
 
     # Create the lifespan manager.
-    loop = asyncio.get_running_loop()
-
     def started(error_message: str | None) -> None:
         assert error_message is None
 
@@ -249,7 +264,7 @@ async def test_lifespan_shutdown_failed() -> None:
     shutting_down = asyncio.Event()
     uut = run(
         Container(app, None),
-        loop.create_future(),
+        _Adapter(),
         started,
         functools.partial(_wait_for_event, shutting_down),
         shutdown_complete,
@@ -297,7 +312,6 @@ async def test_lifespan_not_supported() -> None:
         raise ValueError(msg)
 
     # Create the lifespan manager.
-    loop = asyncio.get_running_loop()
     started_called = False
 
     def started(error_message: str | None) -> None:
@@ -315,7 +329,7 @@ async def test_lifespan_not_supported() -> None:
     shutting_down = asyncio.Event()
     uut = run(
         Container(app, None),
-        loop.create_future(),
+        _Adapter(),
         started,
         functools.partial(_wait_for_event, shutting_down),
         shutdown_complete,
@@ -377,10 +391,9 @@ async def test_lifespan_receive_after_shutdown() -> None:
     async def anop() -> None:
         pass
 
-    loop = asyncio.get_running_loop()
     uut = run(
         Container(app, None),
-        loop.create_future(),
+        _Adapter(),
         lambda _: None,
         anop,
         lambda _: None,

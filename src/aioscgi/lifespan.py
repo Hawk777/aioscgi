@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from typing import Never
 
 from .container import Container
-from .types import EventOrScope
+from .types import Adapter, EventOrScope
 
 
 @enum.unique
@@ -60,7 +60,7 @@ class _Manager:
     def __init__(
         self,
         container: Container,
-        never: Awaitable[Never],
+        adapter: Adapter,
         started: Callable[[str | None], None],
         shutting_down: Callable[[], Awaitable[None]],
         shutdown_complete: Callable[[str | None], None],
@@ -83,7 +83,7 @@ class _Manager:
             application uses to send the lifespan.shutdown.{complete,failed} event.
         """
         self._container = container
-        self._never = never
+        self._never = adapter.create_never()
         self._started = started
         self._shutting_down = shutting_down
         self._shutdown_complete = shutdown_complete
@@ -287,7 +287,7 @@ class _Manager:
 
 async def run(
     container: Container,
-    never: Awaitable[Never],
+    adapter: Adapter,
     started: Callable[[str | None], None],
     shutting_down: Callable[[], Awaitable[None]],
     shutdown_complete: Callable[[str | None], None],
@@ -320,7 +320,7 @@ async def run(
     The callables will be invoked directly in the task that called this function.
 
     :param container: The ASGI container.
-    :param never: An awaitable that will never complete.
+    :param adapter: The I/O adapter.
     :param started: A callable that is invoked once the application has started up,
         passing the failure message if startup failed or None if startup succeeded. This
         callable is invoked on whatever task the application uses to send the
@@ -335,7 +335,7 @@ async def run(
     """
     await _Manager(
         container,
-        never,
+        adapter,
         started,
         shutting_down,
         shutdown_complete,

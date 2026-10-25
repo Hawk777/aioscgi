@@ -361,7 +361,7 @@ async def _main_coroutine_guarded(
         lifespan_tg.create_task(
             lifespan.run(
                 container,
-                loop.create_future(),
+                _adapter,
                 functools.partial(
                     _complete_lifespan_future,
                     lifespan_started,

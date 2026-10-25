@@ -13,7 +13,7 @@ import socket
 import sys
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from contextlib import AbstractAsyncContextManager
-from typing import override
+from typing import Never, override
 
 from . import http, lifespan
 from .container import Container
@@ -29,6 +29,10 @@ class _Adapter(Adapter):
     @override
     def create_mutex(self) -> AbstractAsyncContextManager[None]:
         return asyncio.Lock()
+
+    @override
+    def create_never(self) -> Awaitable[Never]:
+        return asyncio.get_running_loop().create_future()
 
 
 _adapter = _Adapter()

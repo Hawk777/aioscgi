@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import wsgiref.headers
-from collections.abc import Coroutine
+from collections.abc import Awaitable, Coroutine
 from contextlib import AbstractAsyncContextManager
-from typing import override
+from typing import Never, override
 from unittest.mock import MagicMock, _Call, call
 
 import pytest
@@ -80,7 +80,7 @@ class _Adapter(Adapter):
     """
     A mock Adapter.
 
-    create_mutex works properly.
+    create_mutex and create_never work properly.
     """
 
     __slots__ = ()
@@ -88,6 +88,10 @@ class _Adapter(Adapter):
     @override
     def create_mutex(self) -> AbstractAsyncContextManager[None]:
         return asyncio.Lock()
+
+    @override
+    def create_never(self) -> Awaitable[Never]:
+        return asyncio.get_running_loop().create_future()
 
 
 class _Socket(Socket):

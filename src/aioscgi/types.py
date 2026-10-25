@@ -3,7 +3,7 @@
 import abc
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
-from typing import Any
+from typing import Any, Never
 
 EventOrScopeValue = bytes | str | int | float | list[Any] | dict[str, Any] | bool | None
 """The legal types of values in event or scope dictionaries."""
@@ -58,6 +58,14 @@ class Adapter(abc.ABC):
 
         :return: An object that can be used as an asynchronous context manager, such
             that only one async task can be within the context at a time.
+        """
+
+    @abc.abstractmethod
+    def create_never(self) -> Awaitable[Never]:
+        """
+        Create a future that never completes.
+
+        :return: An object that can be awaited, but will never be complete.
         """
 
 

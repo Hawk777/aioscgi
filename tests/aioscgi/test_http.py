@@ -118,7 +118,7 @@ class _Socket(Socket):
 
 
 def run_test(
-    read_events: list[sioscgi.request.Event | None],
+    read_events: list[sioscgi.request.Event | Exception],
     write_events: list[sioscgi.response.Event],
     expected_headers: list[list[bytes]],
     expected_environ: dict[str, bytes],
@@ -358,7 +358,6 @@ def test_disconnect_after_request() -> None:
         ],
         [],
         read_returns_eof=True,
-        extra_reader_calls=[call.read_chunk()],
     )
 
 
@@ -378,7 +377,7 @@ def test_disconnect_during_request() -> None:
                 },
             ),
             sioscgi.request.Body(b"1234"),
-            None,
+            sioscgi.request.RemotePrematureEOFError(),
         ],
         [],
         [[b"content-length", b"8"]],
@@ -397,10 +396,6 @@ def test_disconnect_during_request() -> None:
         ],
         [],
         read_returns_eof=True,
-        extra_reader_calls=[
-            call.read_chunk(),
-            call.receive_data(b""),
-        ],
     )
 
 

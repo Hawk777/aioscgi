@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import functools
 import http
 import logging
 import urllib.parse
 import wsgiref.util
-from collections.abc import Mapping
-from contextlib import AbstractAsyncContextManager
+from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Mapping
+from contextlib import AbstractAsyncContextManager, aclosing, closing
 from typing import Any
 
 import sioscgi.request
@@ -18,7 +19,80 @@ from .types import Adapter, EventOrScope, Socket
 
 
 class _ConnectionClosedError(BrokenPipeError):
-    """Raised from the send function if the HTTP connection was closed by the peer."""
+    """Raised from send if the HTTP connection was closed by the peer."""
+
+    __slots__ = ()
+
+
+class _ReceiveAfterAppEndsError(Exception):
+    """Raised from receive if called after the application coroutine ends."""
+
+    __slots__ = ()
+
+    def __init__(self) -> None:
+        super().__init__("receive function called after application coroutine ended")
+
+
+class _ReceiveAfterDisconnectError(Exception):
+    """Raised from receive if called again after returning http.disconnect."""
+
+    __slots__ = ()
+
+    def __init__(self) -> None:
+        super().__init__("receive function called after returning http.disconnect")
+
+
+class _SendAfterAppEndsError(Exception):
+    """Raised from send if called after the application coroutine ends."""
+
+    __slots__ = {
+        "event": "The event that was erroneously sent.",
+    }
+
+    event: str
+
+    def __init__(self, event: str) -> None:
+        super().__init__(
+            f"send called with event type “{event}” after application coroutine ended",
+        )
+        self.event = event
+
+
+class _SendAfterLastError(Exception):
+    """Raised from send if called again after what should have been the last event."""
+
+    __slots__ = {
+        "cur_event": "The event that was erroneously sent.",
+        "prev_event": "The previous event that should have been the last one.",
+    }
+
+    cur_event: str
+    prev_event: str
+
+    def __init__(self, cur_event: str, prev_event: str) -> None:
+        super().__init__(
+            f"send called with event type “{cur_event}”, expected previous event of "
+            f"type “{prev_event}” to be the last one",
+        )
+        self.cur_event = cur_event
+        self.prev_event = prev_event
+
+
+class _SendAfterErrorError(Exception):
+    """Raised from send if called again after a previous call failed."""
+
+    __slots__ = {
+        "event": "The event that was erroneously sent.",
+    }
+
+    event: str
+
+    def __init__(self, event: str) -> None:
+        super().__init__(
+            f"send called with event type “{event}” after previously raising an "
+            "exception"
+        )
+        self.event = event
 
 
 def _calc_http_version(server_protocol: bytes) -> str:
@@ -231,29 +305,25 @@ class _Connection:
 
     __slots__ = {
         "_container": "The ASGI container.",
-        "_disconnected": "Whether the SCGI connection has been closed.",
+        "_disconnected_set": "A callable that sets the disconnected event.",
+        "_disconnected_wait": "A callable that waits for the disconnected event.",
+        "_read_error": "The error that previously occurred while reading, if any.",
         "_reader": "The SCGI protocol request state machine.",
         "_reader_mutex": "A mutex held by the task calling _receive.",
-        "_request_ended": "Whether the end of the request has been received.",
         "_socket": "The socket.",
+        "_write_error": "The error that previously occurred while writing, if any.",
         "_writer": "The SCGI protocol response state machine.",
-        "_writer_pending_headers": """
-            The pending response headers.
-
-            If the application has sent http.response.start but no body content, nothing
-            is sent to the SCGI client yet; instead, the response headers are held here
-            until the application generates body content.
-            """,
     }
 
     _container: Container
-    _disconnected: bool
+    _disconnected_set: Callable[[], None]
+    _disconnected_wait: Callable[[], Awaitable[None]]
+    _read_error: Exception | None
     _reader: sioscgi.request.SCGIReader
     _reader_mutex: AbstractAsyncContextManager[None]
-    _request_ended: bool
     _socket: Socket
+    _write_error: Exception | None
     _writer: sioscgi.response.SCGIWriter
-    _writer_pending_headers: sioscgi.response.Headers | None
 
     def __init__(self, container: Container, adapter: Adapter, socket: Socket) -> None:
         """
@@ -264,13 +334,13 @@ class _Connection:
         :param socket: The incoming connected socket.
         """
         self._container = container
-        self._disconnected = False
+        (self._disconnected_set, self._disconnected_wait) = adapter.create_event()
+        self._read_error = None
         self._reader = sioscgi.request.SCGIReader()
         self._reader_mutex = adapter.create_mutex()
-        self._request_ended = False
         self._socket = socket
+        self._write_error = None
         self._writer = sioscgi.response.SCGIWriter()
-        self._writer_pending_headers = None
 
     async def run(self) -> None:
         """
@@ -288,7 +358,11 @@ class _Connection:
                 logging.getLogger(__name__).exception("SCGI remote protocol error")
                 return
             if event is None:
-                chunk = await self._read_chunk_wrapper()
+                try:
+                    chunk = await self._socket.read_chunk()
+                except ConnectionResetError:
+                    # RST before headers are finished. Abandon the request.
+                    return
                 if chunk:
                     self._reader.receive_data(chunk)
                 else:
@@ -306,145 +380,218 @@ class _Connection:
             return
 
         # Run the application.
-        logging.getLogger(__name__).debug("Starting application with scope %s", scope)
-        try:
-            await self._container.application(scope, self._receive, self._send)
-        except _ConnectionClosedError:
-            pass
-        except Exception:  # pylint: disable=broad-except
-            logging.getLogger(__name__).exception(
-                "Uncaught exception in application callable",
-            )
-
-    async def _receive(self) -> EventOrScope:
-        """Receive the next event from the SCGI client to the application."""
-        async with self._reader_mutex:
-            if self._disconnected:
-                # The connection has already disconnected.
-                logging.getLogger(__name__).debug("receive called after disconnect")
-                return {"type": "http.disconnect"}
-            if self._request_ended:
-                # Asking for another event after the request body is complete can only
-                # mean one thing: wait for the connection to close and return
-                # http.disconnect. This might be useful as part of a wait-for-any scheme
-                # where the application wants to wait for either some external event or
-                # the client to disconnect, for long polling.
+        with closing(self._send_gen()) as send_gen:
+            next(send_gen)  # Advance to the first yield expression.
+            async with aclosing(self._receive_gen()) as receive_gen:
                 logging.getLogger(__name__).debug(
-                    "receive called after end of request: wait for disconnect",
+                    "Starting application with scope %s",
+                    scope,
                 )
-                await self._read_chunk_wrapper()
-                self._disconnected = True
-                return {"type": "http.disconnect"}
-            while True:
-                # Try to get an event from sioscgi.
                 try:
-                    event = self._reader.next_event()
-                except sioscgi.request.Error:
-                    self._request_ended = True
-                    self._disconnected = True
-                    logging.getLogger(__name__).exception("SCGI remote protocol error")
-                    return {"type": "http.disconnect"}
-                if event is not None:
-                    # Translate the event into an ASGI event.
-                    assert isinstance(event, sioscgi.request.Body | sioscgi.request.End)
-                    if isinstance(event, sioscgi.request.Body):
-                        return {
-                            "type": "http.request",
-                            "body": event.data,
-                            "more_body": True,
-                        }
-                    self._request_ended = True
-                    return {"type": "http.request"}
-                # No more events available. Read bytes from the SCGI socket.
-                raw = await self._read_chunk_wrapper()
-                self._reader.receive_data(raw)
-                if not raw:
-                    self._request_ended = True
-                    self._disconnected = True
-                    logging.getLogger(__name__).debug("Premature EOF on SCGI socket")
-                    return {"type": "http.disconnect"}
+                    await self._container.application(
+                        scope,
+                        functools.partial(self._receive, receive_gen),
+                        functools.partial(self._send, send_gen),
+                    )
+                except _ConnectionClosedError:
+                    pass
+                except Exception:  # pylint: disable=broad-except
+                    logging.getLogger(__name__).exception(
+                        "Uncaught exception in application callable",
+                    )
 
-    async def _send(self, event: EventOrScope) -> None:
-        event_type = event["type"]
-        if event_type == "http.response.start":
-            status_code = event["status"]
-            assert isinstance(status_code, int)
-            headers = event["headers"]
-            assert isinstance(headers, list)
-            string_headers = (
-                (k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in headers
-            )
-            # The ASGI specification says the application is allowed to send
-            # Transfer-Encoding and the container is required to ignore it.
-            filtered_headers = [
-                (k, v) for k, v in string_headers if k.lower() != "transfer-encoding"
-            ]
-            encoded = sioscgi.response.Headers(
-                _calc_status(status_code),
-                filtered_headers,
-            )
-            if self._writer_pending_headers is not None:
-                # We want to report the problem immediately, but really it’s an SCGI
-                # state machine error and therefore “should” be sioscgi’s job to report.
-                # However, sioscgi can’t be responsible, because we’re holding the
-                # response headers back until the first body part and therefore sioscgi
-                # never actually sees anything. Just pretend.
-                raise sioscgi.response.BadEventInStateError(
-                    sioscgi.response.Headers,
-                    self._writer.state,
-                )
-            self._writer_pending_headers = encoded
-        elif event_type == "http.response.body":
-            if self._writer_pending_headers is not None:
-                self._send_event(self._writer_pending_headers)
-                self._writer_pending_headers = None
-            body = event.get("body")
-            if body:  # is present, not None, and nonzero length
-                assert isinstance(body, bytes)
-                self._send_event(sioscgi.response.Body(body))
-            if not event.get("more_body", False):
-                self._send_event(sioscgi.response.End())
-        elif event_type == "http.response.pathsend":
-            if not self._container.x_sendfile:
-                msg = (
-                    "Event type http.response.pathsend passed to send, but that "
-                    "extension is not enabled"
-                )
-                raise ValueError(msg)
-            path = event["path"]
-            assert isinstance(path, str)
-            if self._writer_pending_headers is None:
-                msg = (
-                    "Event type http.response.pathsend passed to send without previous "
-                    "http.response.start, or with previous http.response.body"
-                )
-                raise ValueError(msg)
-            old_headers = self._writer_pending_headers
-            self._writer_pending_headers = None
-            old_headers.other_headers["X-Sendfile"] = urllib.parse.quote(path, "")
-            self._send_event(old_headers)
-            self._send_event(sioscgi.response.End())
-        else:
-            msg = f"Unknown event type {event_type!r} passed to send"
-            raise ValueError(msg)
-        await self._drain_write()
-
-    async def _read_chunk_wrapper(self) -> bytes:
+    async def _receive_next_event(self) -> sioscgi.request.Event:
         """
-        Read the next chunk from the SCGI client.
+        Receive the next sioscgi event.
 
-        A ConnectionResetError is translated into an EOF.
+        This method must not be called after it has returned sioscgi.request.End.
+
+        :return: The event.
         """
+        while (event := self._reader.next_event()) is None:
+            try:
+                chunk = await self._socket.read_chunk()
+            except ConnectionResetError:
+                chunk = b""
+            self._reader.receive_data(chunk)
+        return event
+
+    async def _receive_gen(self) -> AsyncGenerator[EventOrScope]:
+        """
+        Yield the events that the application should receive.
+
+        The generator will yield as many legitimate events as possible, then raise an
+        exception indicating that either a protocol or I/O error occurred or that the
+        application is asking for another event when it shouldn’t.
+        """
+        # Ship events from sioscgi until reaching End.
         try:
-            return await self._socket.read_chunk()
-        except ConnectionResetError:
-            return b""
+            while True:
+                event = await self._receive_next_event()
+                assert isinstance(event, sioscgi.request.Body | sioscgi.request.End)
+                if isinstance(event, sioscgi.request.Body):
+                    yield {
+                        "type": "http.request",
+                        "body": event.data,
+                        "more_body": True,
+                    }
+                else:
+                    yield {"type": "http.request"}
+                    break
+        except sioscgi.request.Error as exp:
+            if isinstance(exp, sioscgi.request.RemotePrematureEOFError):
+                # This is not really an error, it just indicates the SCGI client is no
+                # longer interested in this request.
+                logging.getLogger(__name__).debug("Premature EOF on SCGI socket")
+            else:
+                logging.getLogger(__name__).exception("SCGI remote protocol error")
+            yield {"type": "http.disconnect"}
+            raise _ReceiveAfterDisconnectError from None
 
-    def _send_event(self, event: sioscgi.response.Event) -> None:
-        """Send an event to the SCGI client."""
-        raw = self._writer.send(event)
+        # After the end of the body, receiving again just waits until the connection is
+        # closed and then returns http.disconnect.
+        await self._disconnected_wait()
+        yield {"type": "http.disconnect"}
+        raise _ReceiveAfterDisconnectError
+
+    async def _receive(self, gen: AsyncGenerator[EventOrScope]) -> EventOrScope:
+        """
+        Receive the next event from the SCGI client to the application.
+
+        :param gen: The generator that yields events.
+        """
+        async with self._reader_mutex:
+            if self._read_error is not None:
+                raise self._read_error
+            try:
+                return await anext(gen)
+            except StopAsyncIteration:
+                raise _ReceiveAfterAppEndsError from None
+            except Exception as exp:
+                self._read_error = exp
+                raise
+
+    def _send_events(self, *events: sioscgi.response.Event) -> None:
+        """Send one or more events to the SCGI client."""
+        events_bytes = (self._writer.send(i) for i in events)
+        raw = b"".join(i for i in events_bytes if i is not None)
         if raw:
             self._socket.write_chunk(raw)
+
+    @staticmethod
+    def _send_unpack_start(event: EventOrScope) -> tuple[int, list[tuple[str, str]]]:
+        """
+        Check and unpack an event of type “http.response.start”.
+
+        :param event: The event from the application.
+        :return: The HTTP status code and response headers.
+        """
+        event_type = event["type"]
+        assert isinstance(event_type, str)
+        if event_type != "http.response.start":
+            msg = f"App sent event “{event_type}”, expected “http.response.start”"
+            raise ValueError(msg)
+        if "trailers" in event:
+            msg = "trailers are not supported via SCGI"
+            raise ValueError(msg)
+        status_code = event["status"]
+        if not isinstance(status_code, int):
+            msg = f"status key is of type {type(status_code)}, expected int"
+            raise TypeError(msg)
+        app_headers = event["headers"]
+        if not isinstance(app_headers, list):
+            msg = f"headers key is of type {type(app_headers)}, expected list"
+            raise TypeError(msg)
+        str_headers = (
+            (k.decode("ISO-8859-1"), v.decode("ISO-8859-1")) for k, v in app_headers
+        )
+        # The ASGI specification says the application is allowed to send
+        # Transfer-Encoding and the container is required to ignore it.
+        headers = [(k, v) for k, v in str_headers if k.lower() != "transfer-encoding"]
+        return (status_code, headers)
+
+    def _send_gen(self) -> Generator[None, EventOrScope, None]:
+        """
+        Accept events from the application sent to the framework.
+
+        :return: A generator that can be sent events sent by the application, and that
+            either consumes them or raises an exception if they should be rejected.
+        """
+        # Get http.response.start. Don’t actually send anything yet, because we might
+        # need to augment the headers with X-Sendfile later.
+        event = yield
+        (status_code, headers) = self._send_unpack_start(event)
+
+        # Get the first body event.
+        event = yield
+        event_type = event["type"]
+        assert isinstance(event_type, str)
+        match event_type:
+            case "http.response.body":
+                # Send the saved headers plus the body chunk.
+                data = event.get("body", b"")
+                assert isinstance(data, bytes)
+                self._send_events(
+                    sioscgi.response.Headers(
+                        _calc_status(status_code),
+                        headers,
+                    ),
+                    sioscgi.response.Body(data),
+                )
+                more = event.get("more_body", False)
+
+            case "http.response.pathsend":
+                if not self._container.x_sendfile:
+                    msg = (
+                        "App sent event “http.response.pathsend”, but pathsend "
+                        "extension (X-Sendfile option) is disabled"
+                    )
+                    raise ValueError(msg)
+                # Add X-Sendfile to the headers and send them. http.response.pathsend
+                # may not be mixed with http.response.body, so this must be the last
+                # sent event.
+                path = event["path"]
+                assert isinstance(path, str)
+                headers.append(("X-Sendfile", urllib.parse.quote(path, "")))
+                self._send_events(
+                    sioscgi.response.Headers(
+                        _calc_status(status_code),
+                        headers,
+                    ),
+                )
+                more = False
+
+            case _:
+                expected_types = (
+                    "http.response.body or http.response.pathsend"
+                    if self._container.x_sendfile
+                    else "http.response.body"
+                )
+                msg = f"App sent event “{event_type}”, expected {expected_types}"
+                raise ValueError(msg)
+
+        # Get the rest of the body events.
+        while more:
+            event = yield
+            event_type = event["type"]
+            assert isinstance(event_type, str)
+            if event_type != "http.response.body":
+                msg = f"App sent event “{event_type}”, expected http.response.body"
+                raise ValueError(msg)
+            data = event.get("body", b"")
+            assert isinstance(data, bytes)
+            self._send_events(sioscgi.response.Body(data))
+            more = event.get("more_body", False)
+
+        # The response body is done so close the connection.
+        self._send_events(sioscgi.response.End())
+        self._disconnected_set()
+
+        # There shouldn’t be any more events now, so if there are, report an error.
+        erroneous_event = yield
+        erroneous_type = erroneous_event["type"]
+        assert isinstance(erroneous_type, str)
+        raise _SendAfterLastError(erroneous_type, event_type)
 
     async def _drain_write(self) -> None:
         """Wait until enough previously written data has been passed to the OS."""
@@ -452,8 +599,34 @@ class _Connection:
             await self._socket.drain_write()
         except (BrokenPipeError, ConnectionResetError) as exp:
             logging.getLogger(__name__).debug("SCGI socket broken on write")
-            self._disconnected = True
             raise _ConnectionClosedError from exp
+
+    async def _send(
+        self,
+        gen: Generator[None, EventOrScope, None],
+        event: EventOrScope,
+    ) -> None:
+        """
+        Send the next event from the application to the SCGI client.
+
+        :param gen: The generator that handles events.
+        :param event: The event from the application.
+        """
+        if self._write_error is not None:
+            raise self._write_error
+        try:
+            try:
+                gen.send(event)
+            except StopIteration:
+                event_type = event["type"]
+                assert isinstance(event_type, str)
+                raise _SendAfterAppEndsError(event_type) from None
+            await self._drain_write()
+        except Exception as exp:
+            if self._write_error is None:
+                self._write_error = exp
+            self._disconnected_set()
+            raise
 
 
 async def run(container: Container, adapter: Adapter, socket: Socket) -> None:

@@ -14,7 +14,7 @@ import sioscgi.request
 import sioscgi.response
 
 from .container import Container
-from .types import EventOrScope, Socket
+from .types import Adapter, EventOrScope, Socket
 
 
 class _ConnectionClosedError(BrokenPipeError):
@@ -255,17 +255,18 @@ class _Connection:
     _writer: sioscgi.response.SCGIWriter
     _writer_pending_headers: sioscgi.response.Headers | None
 
-    def __init__(self, container: Container, socket: Socket) -> None:
+    def __init__(self, container: Container, adapter: Adapter, socket: Socket) -> None:
         """
         Construct a new _Connection.
 
         :param container: The ASGI container.
+        :param adapter: The I/O adapter.
         :param socket: The incoming connected socket.
         """
         self._container = container
         self._disconnected = False
         self._reader = sioscgi.request.SCGIReader()
-        self._reader_mutex = socket.create_mutex()
+        self._reader_mutex = adapter.create_mutex()
         self._request_ended = False
         self._socket = socket
         self._writer = sioscgi.response.SCGIWriter()
@@ -455,11 +456,12 @@ class _Connection:
             raise _ConnectionClosedError from exp
 
 
-async def run(container: Container, socket: Socket) -> None:
+async def run(container: Container, adapter: Adapter, socket: Socket) -> None:
     """
     Handle an SCGI connection.
 
     :param container: The ASGI container.
+    :param adapter: The I/O adapter.
     :param socket: The incoming connected socket.
     """
-    return await _Connection(container, socket).run()
+    return await _Connection(container, adapter, socket).run()

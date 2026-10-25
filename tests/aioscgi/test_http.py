@@ -15,7 +15,7 @@ import sioscgi.response
 
 from aioscgi.container import Container
 from aioscgi.http import run
-from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction, Socket
+from aioscgi.types import Adapter, EventOrScope, ReceiveFunction, SendFunction, Socket
 
 
 class EventMatcher:
@@ -76,12 +76,26 @@ class EventMatcher:
         return repr(self._expected)
 
 
+class _Adapter(Adapter):
+    """
+    A mock Adapter.
+
+    create_mutex works properly.
+    """
+
+    __slots__ = ()
+
+    @override
+    def create_mutex(self) -> AbstractAsyncContextManager[None]:
+        return asyncio.Lock()
+
+
 class _Socket(Socket):
     """
     A mock Socket.
 
-    create_mutex works properly. read_chunk delegates to a mock, provided when the
-    object was constructed. write_chunk always fails (expecting not to be called).
+    read_chunk delegates to a mock, provided when the object was constructed.
+    write_chunk always fails (expecting not to be called).
     """
 
     __slots__ = {
@@ -102,10 +116,6 @@ class _Socket(Socket):
         """
         super().__init__()
         self._read_chunk_call = read_chunk_call
-
-    @override
-    def create_mutex(self) -> AbstractAsyncContextManager[None]:
-        return asyncio.Lock()
 
     @override
     async def read_chunk(self) -> bytes:
@@ -214,7 +224,7 @@ def run_test(
             read_chunk.return_value = b""
         else:
             read_chunk.side_effect = NotImplementedError
-        coro = run(container, _Socket(read_chunk))
+        coro = run(container, _Adapter(), _Socket(read_chunk))
         assert isinstance(coro, Coroutine)
         with pytest.raises(StopIteration):
             coro.send(None)

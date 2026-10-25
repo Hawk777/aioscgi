@@ -18,7 +18,21 @@ from typing import override
 from . import http, lifespan
 from .container import Container
 from .tcp import TCPAddress
-from .types import Socket, StartStopListener
+from .types import Adapter, Socket, StartStopListener
+
+
+class _Adapter(Adapter):
+    """The Adapter implementation for asyncio."""
+
+    __slots__ = ()
+
+    @override
+    def create_mutex(self) -> AbstractAsyncContextManager[None]:
+        return asyncio.Lock()
+
+
+_adapter = _Adapter()
+"""The singleton instance of the _Adapter class."""
 
 
 class _Socket(Socket):
@@ -46,10 +60,6 @@ class _Socket(Socket):
         super().__init__()
         self._reader = reader
         self._writer = writer
-
-    @override
-    def create_mutex(self) -> AbstractAsyncContextManager[None]:
-        return asyncio.Lock()
 
     @override
     async def read_chunk(self) -> bytes:
@@ -116,7 +126,7 @@ class _ConnectionHandler:
         :param writer: The write half of the connection.
         """
         try:
-            return await http.run(self._container, _Socket(reader, writer))
+            return await http.run(self._container, _adapter, _Socket(reader, writer))
         finally:
             writer.close()
             with contextlib.suppress(BrokenPipeError, ConnectionResetError):

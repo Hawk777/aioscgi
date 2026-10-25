@@ -48,6 +48,19 @@ class StartStopListener(abc.ABC):
         """
 
 
+class Adapter(abc.ABC):
+    """APIs provided by a specific I/O adapter."""
+
+    @abc.abstractmethod
+    def create_mutex(self) -> AbstractAsyncContextManager[None]:
+        """
+        Create a mutex.
+
+        :return: An object that can be used as an asynchronous context manager, such
+            that only one async task can be within the context at a time.
+        """
+
+
 class Socket(abc.ABC):
     """
     A socket speaking the SCGI protocol over which data can be read and written.
@@ -63,15 +76,6 @@ class Socket(abc.ABC):
     """
 
     __slots__ = ()
-
-    @abc.abstractmethod
-    def create_mutex(self) -> AbstractAsyncContextManager[None]:
-        """
-        Create a mutex.
-
-        :return: An object that can be used as an asynchronous context manager, such
-            that only one async task can be within the context at a time.
-        """
 
     @abc.abstractmethod
     async def read_chunk(self) -> bytes:

@@ -8,19 +8,10 @@ import functools
 import pytest
 
 from aioscgi.asyncio import _Adapter as MockAdapter
+from aioscgi.asyncio import _wait_for_event
 from aioscgi.container import Container
 from aioscgi.lifespan import run
 from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
-
-
-async def _wait_for_event(e: asyncio.Event) -> None:
-    """
-    Wait for an event.
-
-    This adapter exists to give a return type of None, while the underlying Event.wait’s
-    return type is bool.
-    """
-    await e.wait()
 
 
 @pytest.mark.asyncio

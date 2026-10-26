@@ -1,3 +1,43 @@
+Changes in 2.5.0
+================
+
+Breaking changes
+----------------
+
+Changes have been made in the calling conventions for the HTTP and lifespan
+protocol modules. These changes only affect implementations of I/O adapters,
+not ASGI applications.
+
+New features
+------------
+
+The HTTP protocol now provides ``scope["raw_path"]`` if the HTTP server passes
+the ``REQUEST_URI`` environment variable.
+
+Bug fixes
+---------
+
+Applications attempting to send an event after what should be the last event
+(i.e. after sending  ``lifespan.shutdown.complete`` or ``http.response.body``
+with ``more`` set to ``False``) now always receive an exception.
+
+Applications attempting to receive an event after the last event has already
+been received (i.e. after receiving ``lifespan.shutdown`` or
+``http.disconnect``) now always receive an exception.
+
+Applications attempting to send or receive an HTTP event after the application
+coroutine has completed now always receive an exception.
+
+When shutting down with background tasks left running, the wrong number of
+background tasks would be printed. The right number is now printed.
+
+When using ``--base-uri``, previously, the query string would be incorrectly
+included in ``scope["path"]``. It is no longer included.
+
+``X-Sendfile`` no longer URL-encodes slashes in the filename. This was fine
+with Lighttpd, but did not work with Apache in most configurations. Leaving
+them unencoded works fine with both.
+
 Changes in 2.4.0
 ================
 

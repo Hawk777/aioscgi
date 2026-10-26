@@ -184,6 +184,103 @@ def _calc_status(status: int) -> str:
     return f"{status} {phrase}"
 
 
+def _decode_opt(raw: bytes | None) -> str | None:
+    """
+    UTF-8-decode an optional bytes value.
+
+    :param raw: The bytes to decode.
+    :return: The decoded value, or None if :param raw: is None.
+    :raise UnicodeDecodeError: If the bytes is not None but cannot be decoded.
+    """
+    if raw is None:
+        return None
+    return raw.decode("UTF-8")
+
+
+def _calc_paths(
+    base_uri: str | None,
+    environ: Mapping[str, bytes],
+) -> tuple[str, str, str | None] | None:
+    """
+    Calculate the three path entries for the scope.
+
+    :param base_uri: The base URI provided by the user, or None if one was not provided.
+    :param environ: The CGI/SCGI environment mapping.
+    :return: The root path, path, and raw_path values, or None if they cannot be
+        computed.
+    """
+    # Grab the variables we expect to find useful.
+    request_uri_bytes = environ.get("REQUEST_URI")
+    script_name_bytes = environ["SCRIPT_NAME"]
+    path_info_bytes = environ.get("PATH_INFO")
+
+    # UTF-8-decode them.
+    try:
+        request_uri = _decode_opt(request_uri_bytes)
+    except UnicodeDecodeError:
+        logging.getLogger(__name__).exception(
+            "REQUEST_URI %r is not valid UTF-8",
+            request_uri_bytes,
+        )
+        return None
+    try:
+        script_name = script_name_bytes.decode("UTF-8")
+    except UnicodeDecodeError:
+        logging.getLogger(__name__).exception(
+            "SCRIPT_NAME %r is not valid UTF-8",
+            script_name_bytes,
+        )
+        return None
+    try:
+        path_info = _decode_opt(path_info_bytes)
+    except UnicodeDecodeError:
+        logging.getLogger(__name__).exception(
+            "PATH_INFO %r is not valid UTF-8",
+            path_info_bytes,
+        )
+        return None
+
+    # If we have REQUEST_URI (we might not, because it’s not specified in RFC 3875, but
+    # it seems to be quite common, even enough so to be shown in an example in the SCGI
+    # specification), we can *always* use that as raw_path, and if we don’t, we never
+    # have a raw_path because other variables are populated after URL-decoding (at least
+    # of non-%2F bytes, and maybe all bytes) and therefore not “raw”.
+    if request_uri is not None:
+        question_pos = request_uri.find("?")
+        raw_path = request_uri if question_pos == -1 else request_uri[:question_pos]
+    else:
+        raw_path = None
+
+    # We need to establish a root_path. If it was passed on the command line, use that.
+    # If not, we need the HTTP server to have split the request into SCRIPT_NAME and
+    # PATH_INFO, in which case we use SCRIPT_NAME.
+    #
+    # Some servers, in some configurations, don’t split the path and therefore put the
+    # whole path in SCRIPT_NAME and leave PATH_INFO unset. Apache, for example, does
+    # this when using ProxyPass rather than <Location>SetHandler</Location>. There is
+    # AFAICT no way to detect that this is the case and report an error, so we’ll just
+    # hope the server is configured properly such that SCRIPT_NAME is what we want.
+    if base_uri is not None:
+        root_path = base_uri
+    elif script_name is not None:
+        root_path = script_name
+    else:
+        logging.getLogger(__name__).error(
+            "--base-uri was not specified and SERVER_NAME is missing",
+        )
+        return None
+
+    # We need to establish a path. The path is SCRIPT_NAME plus PATH_INFO. Some servers
+    # may not split the path and may instead put everything in SCRIPT_NAME, but that’s
+    # fine. Ideally this will start with root_path, but it might not if --base-uri was
+    # specified and doesn’t match the HTTP server’s URL space mapping. In that case, let
+    # the application deal with the mismatch—it can assert that path starts with
+    # root_path if it cares, or not if it doesn’t.
+    path = script_name + (path_info or "")
+
+    return (root_path, path, raw_path)
+
+
 def _make_scope(
     container: Container,
     environ: Mapping[str, bytes],
@@ -201,53 +298,10 @@ def _make_scope(
     environ = {k.upper(): v for k, v in environ.items()}
 
     # Figure out paths.
-    if container.base_uri is not None:
-        # A base path was given explicitly. The request URI must begin with the base
-        # path (otherwise the request cannot be handled), and root_path should be
-        # the given base path while path should be the entire request URI. This form
-        # is useful for HTTP servers that don’t set SCRIPT_NAME and PATH_INFO
-        # properly.
-        request_uri = environ["REQUEST_URI"]
-        try:
-            path = request_uri.decode("UTF-8")
-        except UnicodeDecodeError:
-            logging.getLogger(__name__).exception(
-                "REQUEST_URI %s is not valid UTF-8",
-                request_uri,
-            )
-            return None
-        if not path.startswith(container.base_uri):
-            logging.getLogger(__name__).error(
-                'REQUEST_URI "%s" does not start with specified base URI "%s"',
-                path,
-                container.base_uri,
-            )
-            return None
-        root_path = container.base_uri
-    else:
-        # No base path was given. The HTTP server is to be trusted to break down the
-        # request into a part designating the application (called SCRIPT_NAME in CGI
-        # and root_path in ASGI) and a part designating an entity within the
-        # application (called PATH_INFO in CGI, and the portion of path following
-        # root_path in ASGI).
-        script_name = environ["SCRIPT_NAME"]
-        try:
-            root_path = script_name.decode("UTF-8")
-        except UnicodeDecodeError:
-            logging.getLogger(__name__).exception(
-                "SCRIPT_NAME %s is not valid UTF-8",
-                script_name,
-            )
-            return None
-        path_info = environ.get("PATH_INFO", b"")
-        try:
-            path = root_path + path_info.decode("UTF-8")
-        except UnicodeDecodeError:
-            logging.getLogger(__name__).exception(
-                "PATH_INFO %s is not valid UTF-8",
-                path_info,
-            )
-            return None
+    paths = _calc_paths(container.base_uri, environ)
+    if paths is None:
+        return None
+    (root_path, path, raw_path) = paths
 
     # UTF-8-decode the REQUEST_METHOD and SERVER_NAME fields.
     request_method = environ["REQUEST_METHOD"]
@@ -280,6 +334,7 @@ def _make_scope(
         "method": request_method_str.upper(),
         "scheme": _guess_scheme(environ),
         "path": path,
+        "raw_path": raw_path,
         "query_string": environ["QUERY_STRING"],
         "root_path": root_path,
         "headers": _calc_http_headers(environ),

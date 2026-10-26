@@ -100,3 +100,69 @@ On a UNIX system, aioscgi handles three signals:
   the first are ignored. Even though `SIGQUIT` cancels client-connection-handling tasks,
   the application’s lifespan protocol task (if any) is not cancelled and the normal
   lifespan shutdown process still occurs.
+
+
+# How do I configure my HTTP server?
+
+## Apache
+
+I have not figured out how to get Apache to reliably set the split between
+`SCRIPT_NAME` and `PATH_INFO` where it’s supposed to be, i.e. at the mount
+point of the application. Therefore, passing `--base-uri` to aioscgi is
+necessary.
+
+You should almost certainly *not* set `AllowEncodedSlashes NoDecode` when using
+aioscgi. If you do this, a request like `https://mydomain/myapp/foo%2Fbar` will
+put `/foo%2Fbar` in `PATH_INFO`, which will in turn put `/myapp/foo%2Fbar` in
+`scope["path"]`, in violation of the ASGI specification which says that
+`scope["path"]` must be URL-decoded. Instead, if you need this kind of thing,
+set `AllowEncodedSlashes On`. Then `scope["path"]` will be `/myapp/foo/bar`, in
+compliance with the ASGI specification, and your application can look at
+`scope["raw_path"]` to get `/myapp/foo%2Fbar`.
+
+You can set up
+[mod_proxy_scgi](https://httpd.apache.org/docs/2.4/mod/mod_proxy_scgi.html)
+to handle requests in two ways, both of which can use either TCP or UNIX-domain
+sockets to talk to aioscgi:
+
+```
+# Option 1: SetHandler and UNIX-domain sockets
+<Proxy "unix:/path/to/socket|scgi://mydomain/myapp/">
+</Proxy>
+<Location "/myapp/">
+    SetHandler "proxy:unix:/path/to/socket|scgi://mydomain/myapp/"
+</Location>
+
+# Option 2: SetHandler and TCP sockets
+<Proxy "scgi://myscgiserver:1234/myapp/">
+</Proxy>
+<Location "/myapp/">
+    SetHandler "scgi://myscgiserver:1234/myapp/"
+</Location>
+
+# Option 3: ProxyPass and UNIX-domain sockets
+ProxyPass /myapp/ unix:/path/to/socket|scgi://mydomain/myapp/
+
+# Option 4: ProxyPass and TCP sockets
+ProxyPass /myapp/ scgi://myscgiserver:1234/myapp/
+```
+
+## Lighttpd
+
+Lighttpd splits `SCRIPT_NAME` and `PATH_INFO` just fine, so there’s no need to
+pass `--base-uri` to aioscgi.
+
+```
+scgi.server = (
+    # The /myapp/ here defines SCRIPT_NAME as well as mapping the SCGI
+    # application into the URL space.
+    "/myapp/" => ("myapp" => (
+        # Include the next line for UNIX-domain sockets.
+        "socket" => "/path/to/socket",
+        # Include the next two lines for TCP sockets.
+        "host" => "myscgiserver",
+        "port" => 1234,
+        "check-local" => 0,
+    )),
+)
+```

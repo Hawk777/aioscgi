@@ -468,7 +468,7 @@ def test_x_sendfile() -> None:
                 "200 OK",
                 [
                     ("Content-Type", "text/plain; charset=UTF-8"),
-                    ("X-Sendfile", "%2Ffoo%2Fbar%2Fbaz.txt"),
+                    ("X-Sendfile", "/foo/bar/baz.txt"),
                 ],
             ),
             sioscgi.response.End(),

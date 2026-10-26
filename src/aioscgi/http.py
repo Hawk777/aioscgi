@@ -607,7 +607,7 @@ class _Connection:
                 # sent event.
                 path = event["path"]
                 assert isinstance(path, str)
-                headers.append(("X-Sendfile", urllib.parse.quote(path, "")))
+                headers.append(("X-Sendfile", urllib.parse.quote(path)))
                 self._send_events(
                     sioscgi.response.Headers(
                         _calc_status(status_code),

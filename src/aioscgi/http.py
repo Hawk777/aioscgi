@@ -546,7 +546,7 @@ class _Connection:
         if event_type != "http.response.start":
             msg = f"App sent event “{event_type}”, expected “http.response.start”"
             raise ValueError(msg)
-        if "trailers" in event:
+        if event.get("trailers", False):
             msg = "trailers are not supported via SCGI"
             raise ValueError(msg)
         status_code = event["status"]

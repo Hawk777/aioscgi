@@ -1,3 +1,13 @@
+Changes in 2.5.1
+================
+
+Bug fixes
+---------
+
+Applications can now send a ``trailers`` key in an ``http.response.start``
+event, as long as its value is ``False``. Previously, the key was required to
+be absent.
+
 Changes in 2.5.0
 ================
 

@@ -1,3 +1,11 @@
+Changes in 2.5.2
+================
+
+Breaking changes
+----------------
+
+The minimum Python version was increased to 3.14.
+
 Changes in 2.5.1
 ================
 

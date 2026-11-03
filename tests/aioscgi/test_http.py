@@ -3,13 +3,13 @@
 import wsgiref.headers
 from collections.abc import Coroutine
 from typing import override
-from unittest.mock import MagicMock, _Call, call
+from unittest.mock import MagicMock, _Call, call  # pyright: ignore [reportPrivateUsage]
 
 import pytest
 import sioscgi.request
 import sioscgi.response
 
-from aioscgi.asyncio import _Adapter as MockAdapter
+from aioscgi.asyncio import _Adapter as MockAdapter  # pyright: ignore [reportPrivateUsage]
 from aioscgi.container import Container
 from aioscgi.http import run
 from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction, Socket

@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aioscgi.asyncio import _Adapter as MockAdapter
-from aioscgi.asyncio import _wait_for_event
+from aioscgi.asyncio import _Adapter as MockAdapter  # pyright: ignore [reportPrivateUsage]
+from aioscgi.asyncio import _wait_for_event  # pyright: ignore [reportPrivateUsage]
 from aioscgi.container import Container
 from aioscgi.lifespan import run
 

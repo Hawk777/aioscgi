@@ -565,7 +565,7 @@ class _Connection:
         headers = [(k, v) for k, v in str_headers if k.lower() != "transfer-encoding"]
         return (status_code, headers)
 
-    def _send_gen(self) -> Generator[None, EventOrScope, None]:
+    def _send_gen(self) -> Generator[None, EventOrScope]:
         """
         Accept events from the application sent to the framework.
 
@@ -658,7 +658,7 @@ class _Connection:
 
     async def _send(
         self,
-        gen: Generator[None, EventOrScope, None],
+        gen: Generator[None, EventOrScope],
         event: EventOrScope,
     ) -> None:
         """

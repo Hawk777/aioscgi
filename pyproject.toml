@@ -78,7 +78,6 @@ ignore = [
 	"S101", # assert
 	"TC001", # typing-only-first-party-import
 	"TC003", # typing-only-standard-library-import
-	"UP043", # unnecessary-default-type-args
 ]
 select = ["ALL"]
 

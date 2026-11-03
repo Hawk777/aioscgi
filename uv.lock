@@ -3,7 +3,8 @@ revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
-    "python_full_version < '3.15'",
+    "python_full_version == '3.14.*'",
+    "python_full_version < '3.14'",
 ]
 
 [[package]]
@@ -11,7 +12,8 @@ name = "aioscgi"
 version = "2.5.1"
 source = { editable = "." }
 dependencies = [
-    { name = "sioscgi" },
+    { name = "sioscgi", version = "5.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
+    { name = "sioscgi", version = "5.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
 ]
 
 [package.dev-dependencies]
@@ -661,9 +663,25 @@ wheels = [
 name = "sioscgi"
 version = "5.0.1"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.14'",
+]
 sdist = { url = "https://files.pythonhosted.org/packages/f0/59/7c44eff0dfa9b18cd28786e0e7668a841031cff512ec2a97be741208b1b0/sioscgi-5.0.1.tar.gz", hash = "sha256:a9722aee7a0d92d2538181d89fc77cc430527fd5fcc924f1d3f605d89587e61b", size = 13341, upload-time = "2026-09-16T06:57:49.366Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/10/de/e3b45e1531174bb138b0ecd1e44244efdce55521cc77e9cf2f4a97424837/sioscgi-5.0.1-py3-none-any.whl", hash = "sha256:7f5b71e94100f5041e983dd3d5bcd9e4fb9982d05b97e809444a67ae8a839e32", size = 11588, upload-time = "2026-09-16T06:57:48.474Z" },
+]
+
+[[package]]
+name = "sioscgi"
+version = "5.0.2"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.15'",
+    "python_full_version == '3.14.*'",
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1b/1a/1cb4956d947e6875479eb0b99323b7cbf03bd9713af62de20ff0f403f246/sioscgi-5.0.2.tar.gz", hash = "sha256:1562ca3b9df1fdf70dbc997be7305dc9e801df6dafaed6d897fdec76428f4c8f", size = 14168, upload-time = "2026-11-03T07:15:12.771Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/9b/cb51e403b0d5f3b786341af90b26a08096ce5cd2ada720b8a93fb078e166/sioscgi-5.0.2-py3-none-any.whl", hash = "sha256:308ebe9d4751d6491291bfdb481551c2b5abf8adc6cfa914b0ce5fce7cfbd8d7", size = 11591, upload-time = "2026-11-03T07:15:11.933Z" },
 ]
 
 [[package]]

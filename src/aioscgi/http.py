@@ -90,7 +90,7 @@ class _SendAfterErrorError(Exception):
     def __init__(self, event: str) -> None:
         super().__init__(
             f"send called with event type “{event}” after previously raising an "
-            "exception"
+            "exception",
         )
         self.event = event
 

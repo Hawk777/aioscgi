@@ -58,7 +58,6 @@ disable = [
 exclude = [".ruff_cache"]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
-reportIncompatibleMethodOverride = false
 reportPossiblyUnboundVariable = false
 reportPrivateUsage = false
 reportUnboundVariable = false

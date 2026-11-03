@@ -107,7 +107,7 @@ class _Socket(Socket):
         return ret
 
     @override
-    def write_chunk(self, _data: bytes) -> None:
+    def write_chunk(self, data: bytes) -> None:
         raise NotImplementedError
 
     @override

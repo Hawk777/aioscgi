@@ -1,7 +1,5 @@
 """An I/O adapter connecting aioscgi to the Python standard library asyncio."""
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import functools

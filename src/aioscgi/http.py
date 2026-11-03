@@ -1,7 +1,5 @@
 """The HTTP protocol."""
 
-from __future__ import annotations
-
 import functools
 import http
 import logging

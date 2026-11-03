@@ -1,7 +1,5 @@
 """Tests the core module."""
 
-from __future__ import annotations
-
 import wsgiref.headers
 from collections.abc import Coroutine
 from typing import override

@@ -44,8 +44,8 @@ mypy:
 Ruff:
   needs: []
   script:
-    - uv run --locked ruff format --check --diff
-    - uv run --locked ruff check --output-format=gitlab > ruff-gitlab.json
+    - uv run --locked --group ci ruff format --check --diff
+    - uv run --locked --group ci ruff check --output-format=gitlab > ruff-gitlab.json
   artifacts:
     reports:
       codequality:
@@ -63,7 +63,7 @@ Pylint:
 Unit tests:
   needs: []
   script:
-    - uv run --locked pytest --junit-xml=results.xml
+    - uv run --locked --group ci pytest --junit-xml=results.xml
   artifacts:
     reports:
       junit: results.xml

@@ -260,15 +260,7 @@ def _calc_paths(
     # this when using ProxyPass rather than <Location>SetHandler</Location>. There is
     # AFAICT no way to detect that this is the case and report an error, so we’ll just
     # hope the server is configured properly such that SCRIPT_NAME is what we want.
-    if base_uri is not None:
-        root_path = base_uri
-    elif script_name is not None:
-        root_path = script_name
-    else:
-        logging.getLogger(__name__).error(
-            "--base-uri was not specified and SERVER_NAME is missing",
-        )
-        return None
+    root_path = base_uri if base_uri is not None else script_name
 
     # We need to establish a path. The path is SCRIPT_NAME plus PATH_INFO. Some servers
     # may not split the path and may instead put everything in SCRIPT_NAME, but that’s

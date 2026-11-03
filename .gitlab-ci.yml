@@ -41,16 +41,6 @@ mypy:
       codequality:
         - mypy-gitlab.json
 
-Ruff:
-  needs: []
-  script:
-    - uv run --locked --group ci ruff format --check --diff
-    - uv run --locked --group ci ruff check --output-format=gitlab > ruff-gitlab.json
-  artifacts:
-    reports:
-      codequality:
-        - ruff-gitlab.json
-
 Pylint:
   needs: []
   script:
@@ -67,6 +57,16 @@ Pytest:
   artifacts:
     reports:
       junit: results.xml
+
+Ruff:
+  needs: []
+  script:
+    - uv run --locked --group ci ruff format --check --diff
+    - uv run --locked --group ci ruff check --output-format=gitlab > ruff-gitlab.json
+  artifacts:
+    reports:
+      codequality:
+        - ruff-gitlab.json
 
 Publish to PyPI:
   environment: pypi

@@ -60,7 +60,6 @@ pythonVersion = "3.14"
 typeCheckingMode = "strict"
 reportPossiblyUnboundVariable = false
 reportPrivateUsage = false
-reportUnboundVariable = false
 reportUnknownArgumentType = false
 reportUnnecessaryComparison = false
 reportUnusedClass = false

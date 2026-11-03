@@ -6,6 +6,13 @@ Breaking changes
 
 The minimum Python version was increased to 3.14.
 
+Bug fixes
+---------
+
+A bug in constructing an exception message if a ``lifespan.startup.failed`` or
+``lifespan.shutdown.failed`` event had a ``message`` key with a non-string
+value has been fixed.
+
 Changes in 2.5.1
 ================
 

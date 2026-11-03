@@ -215,7 +215,7 @@ class _Manager:
         else:
             error_message = event.get("message", "")
             if not isinstance(error_message, str):
-                msg = f"message key is of type {type(msg)}, expected str"
+                msg = f"message key is of type {type(error_message)}, expected str"
                 raise TypeError(msg)
         assert isinstance(error_message, str | type(None))
 

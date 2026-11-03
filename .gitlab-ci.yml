@@ -60,7 +60,7 @@ Pylint:
       codequality:
         - pylint-gitlab.json
 
-Unit tests:
+Pytest:
   needs: []
   script:
     - uv run --locked --group ci pytest --junit-xml=results.xml

@@ -4,12 +4,11 @@ build-backend = "uv_build"
 
 [dependency-groups]
 ci = [
-	"mypy-gitlab-code-quality",
 	"pylint-gitlab",
 ]
 dev = [
-	"mypy ~= 2.3.1",
 	"pylint ~= 4.1.3",
+	"pyright ~= 1.1.414",
 	"pytest ~= 9.2.0",
 	"pytest-asyncio ~= 1.4.1",
 	"ruff ~= 0.17.3",
@@ -54,6 +53,18 @@ disable = [
 	"too-many-positional-arguments",
 	"too-many-return-statements",
 ]
+
+[tool.pyright]
+exclude = [".ruff_cache"]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+reportIncompatibleMethodOverride = false
+reportPossiblyUnboundVariable = false
+reportPrivateUsage = false
+reportUnboundVariable = false
+reportUnknownArgumentType = false
+reportUnnecessaryComparison = false
+reportUnusedClass = false
 
 [tool.pytest]
 addopts = ["--import-mode=importlib"]

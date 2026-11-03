@@ -1,10 +1,25 @@
 variables:
+  NPM_CACHE_DIR: .npm-cache
   UV_CACHE_DIR: .uv-cache
   UV_LINK_MODE: copy
 
 default:
+  interruptible: true
+
+.node:
+  cache:
+    key:
+      prefix: npm
+      files:
+        - package-lock.json
+    paths:
+      - $NPM_CACHE_DIR
+  image:
+    name: node:slim
+
+.uv:
   image: ghcr.io/astral-sh/uv:0.13-python3.14-trixie
-  cache: &uv_cache
+  cache:
     key:
       prefix: uv
       files:
@@ -13,9 +28,9 @@ default:
       - $UV_CACHE_DIR
   after_script:
     - uv cache prune
-  interruptible: true
 
 Package:
+  extends: .uv
   stage: build
   needs: []
   script:
@@ -26,22 +41,8 @@ Package:
     exclude:
       - dist/.gitignore
 
-mypy:
-  needs: []
-  cache:
-    - <<: *uv_cache
-    - key: mypy
-      paths:
-        - .mypy_cache/
-  script:
-    - uv run --locked --group ci mypy --strict --output=json src tests > mypy.json || true
-    - uv run --locked --group ci mypy-gitlab-code-quality < mypy.json > mypy-gitlab.json
-  artifacts:
-    reports:
-      codequality:
-        - mypy-gitlab.json
-
 Pylint:
+  extends: .uv
   needs: []
   script:
     - uv run --locked --group ci pylint --output=pylint-gitlab.json --load-plugins=pylint_gitlab --output-format=gitlab-codeclimate src tests
@@ -50,7 +51,30 @@ Pylint:
       codequality:
         - pylint-gitlab.json
 
+Pyright:
+  extends: .uv
+  needs: []
+  script:
+    - uv run --locked --group ci pyright --outputjson src tests > pyright.json
+  artifacts:
+    paths:
+      - pyright.json
+    when: always
+
+Pyright to GitLab:
+  extends: .node
+  needs: [Pyright]
+  when: always
+  script:
+    - npm --cache=$NPM_CACHE_DIR ci
+    - npm --cache=$NPM_CACHE_DIR exec -- pyright-to-gitlab-ci --src=pyright.json --output=pyright-gitlab.json --base_path=.
+  artifacts:
+    reports:
+      codequality:
+        - pyright-gitlab.json
+
 Pytest:
+  extends: .uv
   needs: []
   script:
     - uv run --locked --group ci pytest --junit-xml=results.xml
@@ -59,6 +83,7 @@ Pytest:
       junit: results.xml
 
 Ruff:
+  extends: .uv
   needs: []
   script:
     - uv run --locked --group ci ruff format --check --diff
@@ -69,6 +94,7 @@ Ruff:
         - ruff-gitlab.json
 
 Publish to PyPI:
+  extends: .uv
   environment: pypi
   stage: deploy
   rules:

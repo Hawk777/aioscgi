@@ -58,7 +58,6 @@ disable = [
 exclude = [".ruff_cache"]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
-reportPossiblyUnboundVariable = false
 
 [tool.pytest]
 addopts = ["--import-mode=importlib"]

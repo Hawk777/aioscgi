@@ -434,6 +434,7 @@ async def _main_coroutine_with_lifespan(
         async with asyncio.TaskGroup() as quit_monitor_tg:
             # Create a task group to hold the connection handling tasks, and a timeout
             # that will be scheduled later to bound connection task shutdown time.
+            quit_monitor = None
             try:
                 async with (
                     asyncio.timeout(None) as timeout,
@@ -502,7 +503,8 @@ async def _main_coroutine_with_lifespan(
                 )
             # Now that all client connections are finished, we don’t need the quit
             # monitor task any more.
-            quit_monitor.cancel()
+            if quit_monitor is not None:
+                quit_monitor.cancel()
     log.info("All client connections closed")
 
 

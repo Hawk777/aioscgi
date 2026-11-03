@@ -7,18 +7,21 @@ import contextlib
 import functools
 import io
 import logging
-import pathlib
 import signal
 import socket
 import sys
-from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from contextlib import AbstractAsyncContextManager
-from typing import Never, override
+from typing import TYPE_CHECKING, Never, override
 
 from . import http, lifespan
-from .container import Container
-from .tcp import TCPAddress
 from .types import Adapter, Socket, StartStopListener
+
+if TYPE_CHECKING:
+    import pathlib
+    from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
+
+    from .container import Container
+    from .tcp import TCPAddress
 
 
 class _Adapter(Adapter):

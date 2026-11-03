@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import enum
 import logging
-from collections.abc import Awaitable, Callable
-from typing import Never
+from typing import TYPE_CHECKING, Never
 
-from .container import Container
-from .types import Adapter, EventOrScope
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from .container import Container
+    from .types import Adapter, EventOrScope
 
 
 @enum.unique

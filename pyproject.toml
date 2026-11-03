@@ -76,8 +76,6 @@ ignore = [
 	"FBT001", # boolean-type-hint-positional-argument
 	"PLR09", # too-many-<foo>
 	"S101", # assert
-	"TC001", # typing-only-first-party-import
-	"TC003", # typing-only-standard-library-import
 ]
 select = ["ALL"]
 

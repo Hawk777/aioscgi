@@ -2,8 +2,10 @@
 
 import abc
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractAsyncContextManager
-from typing import Any, Never
+from typing import TYPE_CHECKING, Any, Never
+
+if TYPE_CHECKING:
+    from contextlib import AbstractAsyncContextManager
 
 EventOrScopeValue = bytes | str | int | float | list[Any] | dict[str, Any] | bool | None
 """The legal types of values in event or scope dictionaries."""

@@ -7,15 +7,17 @@ import http
 import logging
 import urllib.parse
 import wsgiref.util
-from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Mapping
 from contextlib import AbstractAsyncContextManager, aclosing, closing
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import sioscgi.request
 import sioscgi.response
 
-from .container import Container
-from .types import Adapter, EventOrScope, Socket
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Mapping
+
+    from .container import Container
+    from .types import Adapter, EventOrScope, Socket
 
 
 class _ConnectionClosedError(BrokenPipeError):

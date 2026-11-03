@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -11,7 +12,9 @@ from aioscgi.asyncio import _Adapter as MockAdapter
 from aioscgi.asyncio import _wait_for_event
 from aioscgi.container import Container
 from aioscgi.lifespan import run
-from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
+
+if TYPE_CHECKING:
+    from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
 
 
 @pytest.mark.asyncio

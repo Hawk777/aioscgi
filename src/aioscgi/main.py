@@ -11,12 +11,14 @@ import pathlib
 import socket
 import sys
 import tomllib
-from collections.abc import Collection, Iterable
-from typing import override
+from typing import TYPE_CHECKING, override
 
 from .container import Container
 from .tcp import TCPAddress
 from .types import StartStopListener
+
+if TYPE_CHECKING:
+    from collections.abc import Collection, Iterable
 
 
 class NullaryListener(StartStopListener):

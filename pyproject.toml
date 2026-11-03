@@ -57,6 +57,8 @@ disable = [
 
 [tool.pytest]
 addopts = ["--import-mode=importlib"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
 strict = true
 testpaths = ["tests"]
 

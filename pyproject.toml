@@ -61,7 +61,6 @@ typeCheckingMode = "strict"
 reportPossiblyUnboundVariable = false
 reportPrivateUsage = false
 reportUnknownArgumentType = false
-reportUnusedClass = false
 
 [tool.pytest]
 addopts = ["--import-mode=importlib"]

@@ -78,23 +78,6 @@ class _SendAfterLastError(Exception):
         self.prev_event = prev_event
 
 
-class _SendAfterErrorError(Exception):
-    """Raised from send if called again after a previous call failed."""
-
-    __slots__ = {
-        "event": "The event that was erroneously sent.",
-    }
-
-    event: str
-
-    def __init__(self, event: str) -> None:
-        super().__init__(
-            f"send called with event type “{event}” after previously raising an "
-            "exception",
-        )
-        self.event = event
-
-
 def _calc_http_version(server_protocol: bytes) -> str:
     """
     Convert an HTTP_PROTOCOL environment value into an HTTP protocol version string.

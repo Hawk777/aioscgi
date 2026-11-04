@@ -25,6 +25,12 @@ application sent an event without that entry). That was non-compliant with the
 ASGI specification, which states that ``event["headers"]`` is optional. A
 missing entry is now accepted.
 
+If an application terminates with an exception due to a write call failing
+because of a closed connection, that should not be considered a reportable
+error. Previously, such exceptions were ignored only if raised on their own,
+but would still be reported if raised in an exception group. They are now also
+suppressed as part of an exception group.
+
 Changes in 2.5.2
 ================
 

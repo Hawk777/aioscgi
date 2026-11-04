@@ -118,7 +118,7 @@ class _Socket(Socket):
 def run_test(
     read_events: list[sioscgi.request.Event | Exception],
     write_events: list[sioscgi.response.Event],
-    expected_headers: list[list[bytes]],
+    expected_headers: list[tuple[bytes, bytes]],
     expected_environ: dict[str, bytes],
     expected_messages: list[EventOrScope],
     send_messages: list[EventOrScope],
@@ -294,7 +294,7 @@ def test_multi_body() -> None:
             sioscgi.response.Body(b"World!"),
             sioscgi.response.End(),
         ],
-        [[b"content-length", b"8"]],
+        [(b"content-length", b"8")],
         {
             "SERVER_PROTOCOL": b"HTTP/1.1",
             "REQUEST_METHOD": b"GET",
@@ -378,7 +378,7 @@ def test_disconnect_during_request() -> None:
             sioscgi.request.RemotePrematureEOFError(),
         ],
         [],
-        [[b"content-length", b"8"]],
+        [(b"content-length", b"8")],
         {
             "SERVER_PROTOCOL": b"HTTP/1.1",
             "REQUEST_METHOD": b"GET",

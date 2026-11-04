@@ -1,3 +1,13 @@
+Changes in 2.5.3
+================
+
+Bug fixes
+---------
+
+The HTTP ``scope["headers"]`` entry is now a list of tuples, not a list of
+lists. This is vague in the ASGI specification, and the ``asgi-types`` package
+suggests the use of tuples here.
+
 Changes in 2.5.2
 ================
 

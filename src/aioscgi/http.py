@@ -111,7 +111,7 @@ def _guess_scheme(environ: dict[str, bytes]) -> str:
     return wsgiref.util.guess_scheme({"HTTPS": https.decode("ISO-8859-1")})
 
 
-def _calc_http_headers(environ: dict[str, bytes]) -> list[list[bytes]]:
+def _calc_http_headers(environ: dict[str, bytes]) -> list[tuple[bytes, bytes]]:
     """
     Extract the HTTP headers from the environment dictionary.
 
@@ -120,7 +120,7 @@ def _calc_http_headers(environ: dict[str, bytes]) -> list[list[bytes]]:
         passing to an ASGI application.
     """
     return [
-        [k.replace("HTTP_", "", 1).replace("_", "-").lower().encode("ISO-8859-1"), v]
+        (k.replace("HTTP_", "", 1).replace("_", "-").lower().encode("ISO-8859-1"), v)
         for k, v in environ.items()
         if (
             k.startswith("HTTP_")

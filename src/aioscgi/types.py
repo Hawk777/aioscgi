@@ -7,7 +7,17 @@ from typing import TYPE_CHECKING, Any, Never
 if TYPE_CHECKING:
     from contextlib import AbstractAsyncContextManager
 
-EventOrScopeValue = bytes | str | int | float | list[Any] | dict[str, Any] | bool | None
+EventOrScopeValue = (
+    bytes
+    | str
+    | int
+    | float
+    | list[Any]
+    | tuple[str, int]
+    | dict[str, Any]
+    | bool
+    | None
+)
 """The legal types of values in event or scope dictionaries."""
 
 EventOrScope = dict[str, EventOrScopeValue]

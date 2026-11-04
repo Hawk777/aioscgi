@@ -175,7 +175,7 @@ def run_test(
         assert scope["path"] == ""
         assert scope["query_string"] == b""
         assert scope["headers"] == expected_headers
-        assert scope["server"] == ["localhost", 80]
+        assert scope["server"] == ("localhost", 80)
         extensions = scope["extensions"]
         assert isinstance(extensions, dict)
         environ: dict[str, bytes] = extensions["environ"]

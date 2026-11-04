@@ -5,24 +5,17 @@ import http
 import logging
 import urllib.parse
 import wsgiref.util
-from contextlib import (
-    AbstractAsyncContextManager,
-    aclosing,
-    asynccontextmanager,
-    closing,
-    contextmanager,
-    suppress,
-)
+from contextlib import AbstractAsyncContextManager, closing, contextmanager, suppress
+from enum import Enum, auto
 from typing import TYPE_CHECKING, cast
 
 import sioscgi.request
 import sioscgi.response
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Mapping
+    from collections.abc import Awaitable, Callable, Generator, Mapping
 
     from asgi_types import (
-        ASGIReceiveCallable,
         ASGIReceiveEvent,
         ASGISendCallable,
         ASGISendEvent,
@@ -339,6 +332,28 @@ def _make_scope(container: Container, environ: Mapping[str, bytes]) -> HTTPScope
     return scope
 
 
+class _ReceiverState(Enum):
+    """The states the receive half of an HTTP connection can be in."""
+
+    PRE_SCOPE = auto()
+    """The scope has not been received yet."""
+
+    NORMAL = auto()
+    """The scope has been received and chunks of data are being turned into events."""
+
+    ENDED = auto()
+    """The End event has been received and the receiver is waiting for disconnection."""
+
+    DISCONNECTED = auto()
+    """The disconnect event has been received."""
+
+    BROKEN = auto()
+    """An error has occurred."""
+
+    APPLICATION_ENDED = auto()
+    """The application coroutine has terminated."""
+
+
 class _Receiver:
     """The receive half of an HTTP connection."""
 
@@ -349,6 +364,7 @@ class _Receiver:
         "_read_error": "The error that previously occurred while reading, if any.",
         "_reader": "The SCGI protocol request state machine.",
         "_socket": "The socket.",
+        "_state": "The current state.",
     }
 
     _container: Container
@@ -357,6 +373,7 @@ class _Receiver:
     _read_error: Exception | None
     _reader: sioscgi.request.SCGIReader
     _socket: Socket
+    _state: _ReceiverState
 
     def __init__(
         self,
@@ -379,31 +396,40 @@ class _Receiver:
         self._read_error = None
         self._reader = sioscgi.request.SCGIReader()
         self._socket = socket
+        self._state = _ReceiverState.PRE_SCOPE
 
     async def receive_scope(self) -> HTTPScope | None:
         """
         Receive data until enough is available to create the scope.
 
-        :return: The scope, or None if the connection was closed too early.
+        :return: The scope, or None if the connection was closed too early or the
+            request is impossible to handle.
         """
+        # Sanity check.
+        assert self._state is _ReceiverState.PRE_SCOPE
+
         # Receive the request line and headers from the SCGI client.
         environ: dict[str, bytes] | None = None
         while environ is None:
             try:
                 event = self._reader.next_event()
-            except sioscgi.request.Error:
+            except sioscgi.request.Error as exp:
                 logging.getLogger(__name__).exception("SCGI remote protocol error")
+                self._read_error = exp
+                self._state = _ReceiverState.BROKEN
                 return None
             if event is None:
                 try:
                     chunk = await self._socket.read_chunk()
                 except ConnectionResetError:
                     # RST before headers are finished. Abandon the request.
+                    self._state = _ReceiverState.DISCONNECTED
                     return None
                 if chunk:
                     self._reader.receive_data(chunk)
                 else:
                     # EOF before headers are finished. Abandon the request.
+                    self._state = _ReceiverState.DISCONNECTED
                     return None
             else:
                 # Got a complete event. The first received event should be the request
@@ -412,89 +438,91 @@ class _Receiver:
                 environ = event.environment
 
         # Build a scope dictionary.
-        return _make_scope(self._container, environ)
+        scope = _make_scope(self._container, environ)
+        self._state = _ReceiverState.NORMAL if scope else _ReceiverState.DISCONNECTED
+        return scope
 
-    async def _receive_next_event(self) -> sioscgi.request.Event:
+    def _translate_event(self, event: sioscgi.request.Event) -> ASGIReceiveEvent:
         """
-        Receive the next sioscgi event.
+        Convert an sioscgi event into an ASGI event.
 
-        This method must not be called after it has returned sioscgi.request.End.
+        This also applies any necessary side effects.
 
-        :return: The event.
+        :param: The event to convert.
+        :return: The converted event.
         """
-        while (event := self._reader.next_event()) is None:
-            try:
-                chunk = await self._socket.read_chunk()
-            except ConnectionResetError:
-                chunk = b""
-            self._reader.receive_data(chunk)
-        return event
+        assert self._state is _ReceiverState.NORMAL
+        if isinstance(event, sioscgi.request.Body):
+            return {"type": "http.request", "body": event.data, "more_body": True}
+        if isinstance(event, sioscgi.request.End):
+            self._state = _ReceiverState.ENDED
+            return {"type": "http.request", "body": b"", "more_body": False}
+        msg = "Untranslatable event"
+        raise ValueError(msg)
 
-    async def _receive_gen(self) -> AsyncGenerator[ASGIReceiveEvent]:
+    async def _receive_by_state(self) -> ASGIReceiveEvent | None:
         """
-        Yield the events that the application should receive.
+        Try to receive one event, based on the current state, ignoring the socket.
 
-        The generator will yield as many legitimate events as possible, then raise an
-        exception indicating that either a protocol or I/O error occurred or that the
-        application is asking for another event when it shouldn’t.
+        :return: The event, or None if the state is NORMAL and more data needs to be
+            read from the socket.
         """
-        # Ship events from sioscgi until reaching End.
-        try:
-            while True:
-                event = await self._receive_next_event()
-                assert isinstance(event, sioscgi.request.Body | sioscgi.request.End)
-                if isinstance(event, sioscgi.request.Body):
-                    yield {
-                        "type": "http.request",
-                        "body": event.data,
-                        "more_body": True,
-                    }
-                else:
-                    yield {"type": "http.request", "body": b"", "more_body": False}
-                    break
-        except sioscgi.request.Error as exp:
-            if isinstance(exp, sioscgi.request.RemotePrematureEOFError):
-                # This is not really an error, it just indicates the SCGI client is no
-                # longer interested in this request.
-                logging.getLogger(__name__).debug("Premature EOF on SCGI socket")
-            else:
-                logging.getLogger(__name__).exception("SCGI remote protocol error")
-            yield {"type": "http.disconnect"}
-            raise _ReceiveAfterDisconnectError from None
+        match self._state:
+            case _ReceiverState.PRE_SCOPE:
+                msg = "Receive called before receive_scope"
+                raise ValueError(msg)
+            case _ReceiverState.NORMAL:
+                try:
+                    event = self._reader.next_event()
+                    if event is None:
+                        return None
+                    return self._translate_event(event)
+                except sioscgi.request.Error as exp:
+                    log = logging.getLogger(__name__)
+                    if isinstance(exp, sioscgi.request.RemotePrematureEOFError):
+                        # This is not really an error, it just indicates the
+                        # SCGI client is no longer interested in this request.
+                        log.debug("Premature EOF on SCGI socket")
+                        self._state = _ReceiverState.DISCONNECTED
+                    else:
+                        log.exception("SCGI remote protocol error")
+                        self._read_error = exp
+                        self._state = _ReceiverState.BROKEN
+                    return {"type": "http.disconnect"}
+            case _ReceiverState.ENDED:
+                await self._disconnected_wait()
+                self._state = _ReceiverState.DISCONNECTED
+                return {"type": "http.disconnect"}
+            case _ReceiverState.DISCONNECTED:
+                raise _ReceiveAfterDisconnectError
+            case _ReceiverState.BROKEN:
+                assert self._read_error is not None
+                raise self._read_error
+            case _ReceiverState.APPLICATION_ENDED:
+                raise _ReceiveAfterAppEndsError
 
-        # After the end of the body, receiving again just waits until the connection is
-        # closed and then returns http.disconnect.
-        await self._disconnected_wait()
-        yield {"type": "http.disconnect"}
-        raise _ReceiveAfterDisconnectError
-
-    async def _receive(self, gen: AsyncGenerator[ASGIReceiveEvent]) -> ASGIReceiveEvent:
+    async def receive(self) -> ASGIReceiveEvent:
         """
-        Receive the next event from the SCGI client to the application.
+        Receive the next event.
 
-        :param gen: The generator that yields events.
+        :return: The received event.
         """
         async with self._mutex:
-            if self._read_error is not None:
-                raise self._read_error
-            try:
-                return await anext(gen)
-            except StopAsyncIteration:
-                raise _ReceiveAfterAppEndsError from None
-            except Exception as exp:
-                self._read_error = exp
-                raise
-
-    @asynccontextmanager
-    async def receive_callable(self) -> AsyncGenerator[ASGIReceiveCallable]:
-        """
-        Construct an ASGI receive callable backed by this _Receiver.
-
-        :return: The callable.
-        """
-        gen = self._receive_gen()
-        async with aclosing(gen):
-            yield functools.partial(self._receive, gen)
+            while True:
+                # Handle based on state.
+                if (event := await self._receive_by_state()) is not None:
+                    return event
+                # We only get here if state is NORMAL and there are no events ready.
+                # That means we need to receive some bytes from the socket.
+                try:
+                    chunk = await self._socket.read_chunk()
+                except ConnectionResetError:
+                    chunk = b""
+                except Exception as exp:
+                    self._read_error = exp
+                    self._state = _ReceiverState.BROKEN
+                    raise
+                self._reader.receive_data(chunk)
 
 
 class _Sender:
@@ -719,11 +747,13 @@ class _Connection:
 
     __slots__ = {
         "_container": "The ASGI container.",
+        "_disconnected_set": "A callable that sets the disconnected event.",
         "_receiver": "The receive half of the protocol.",
         "_sender": "The send half of the protocol.",
     }
 
     _container: Container
+    _disconnected_set: Callable[[], None]
     _receiver: _Receiver
     _sender: _Sender
 
@@ -736,9 +766,9 @@ class _Connection:
         :param socket: The incoming connected socket.
         """
         self._container = container
-        (disconnected_set, disconnected_wait) = adapter.create_event()
+        (self._disconnected_set, disconnected_wait) = adapter.create_event()
         self._receiver = _Receiver(container, adapter, socket, disconnected_wait)
-        self._sender = _Sender(container, socket, disconnected_set)
+        self._sender = _Sender(container, socket, self._disconnected_set)
 
     async def run(self) -> None:
         """
@@ -754,18 +784,40 @@ class _Connection:
 
         # Run the application.
         with self._sender.send_callable() as send:
-            async with self._receiver.receive_callable() as receive:
-                logging.getLogger(__name__).debug(
-                    "Starting application with scope %s",
-                    scope,
-                )
-                try:
-                    with suppress(_ConnectionClosedError):
-                        await self._container.application(scope, receive, send)
-                except Exception:  # pylint: disable=broad-except
-                    logging.getLogger(__name__).exception(
-                        "Uncaught exception in application callable",
+            logging.getLogger(__name__).debug(
+                "Starting application with scope %s",
+                scope,
+            )
+            try:
+                with suppress(_ConnectionClosedError):
+                    await self._container.application(
+                        scope,
+                        self._receiver.receive,
+                        send,
                     )
+            except Exception:  # pylint: disable=broad-except
+                logging.getLogger(__name__).exception(
+                    "Uncaught exception in application callable",
+                )
+            finally:
+                # The main application coroutine could return while a secondary spawned
+                # task is blocked in a call to receive. There are two cases where a call
+                # to receive can block.
+                #
+                # The first case is that the request body is incomplete and the call is
+                # waiting for more bytes. That case is fine: the caller of this run
+                # method is expected to close the connection once we return, which will
+                # cause the in-progress receive call to fail.
+                #
+                # The second case is that the request body is complete and the receive
+                # call is waiting to return http.disconnect. In that case, it is waiting
+                # on the disconnected event, not on the socket, so closure of the socket
+                # won’t wake it up. To make sure it wakes up, set the disconnected event
+                # now. Normally it will already be set (because it is also set as a side
+                # effect of any write error or of reaching the end of the response
+                # body), but if the application returns without finishing the response
+                # body, this could happen.
+                self._disconnected_set()
 
 
 async def run(container: Container, adapter: Adapter, socket: Socket) -> None:

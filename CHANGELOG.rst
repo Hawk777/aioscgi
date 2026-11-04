@@ -40,6 +40,15 @@ error. Previously, such exceptions were ignored only if raised on their own,
 but would still be reported if raised in an exception group. They are now also
 suppressed as part of an exception group.
 
+If the application spawned a separate task which called and awaited the
+HTTP ``receive`` callable, then returned from the main application callable,
+aioscgi would crash. This has been fixed.
+
+If the application called the HTTP ``receive`` callable then cancelled the
+returned awaitable (for example with ``asyncio.timeout``), it is likely that
+the ``receive`` callable would become unusable. It should now remain usable for
+subsequent calls.
+
 Changes in 2.5.1
 ================
 

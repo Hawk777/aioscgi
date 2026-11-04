@@ -7,6 +7,7 @@ ci = [
 	"pylint-gitlab",
 ]
 dev = [
+	"asgi-types ~= 0.2.0",
 	"pylint ~= 4.1.3",
 	"pyright ~= 1.1.414",
 	"pytest ~= 9.2.0",

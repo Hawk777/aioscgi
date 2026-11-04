@@ -12,7 +12,7 @@ from aioscgi.container import Container
 from aioscgi.lifespan import run
 
 if TYPE_CHECKING:
-    from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction
+    from asgi_types import ASGIReceiveCallable, ASGISendCallable, Scope
 
 
 @pytest.mark.asyncio
@@ -23,9 +23,9 @@ async def test_lifespan_startup_successful() -> None:
     shutdown_seen = False
 
     async def app(
-        scope: EventOrScope,
-        receive: ReceiveFunction,
-        send: SendFunction,
+        scope: Scope,
+        receive: ASGIReceiveCallable,
+        send: ASGISendCallable,
     ) -> None:
         nonlocal startup_seen, shutdown_seen
         assert scope["type"] == "lifespan"
@@ -82,9 +82,9 @@ async def test_lifespan_startup_failed() -> None:
     shutdown_seen = False
 
     async def app(
-        scope: EventOrScope,
-        receive: ReceiveFunction,
-        send: SendFunction,
+        scope: Scope,
+        receive: ASGIReceiveCallable,
+        send: ASGISendCallable,
     ) -> None:
         nonlocal startup_seen, shutdown_seen
         assert scope["type"] == "lifespan"
@@ -139,9 +139,9 @@ async def test_lifespan_shutdown_successful() -> None:
     shutdown_seen = False
 
     async def app(
-        scope: EventOrScope,
-        receive: ReceiveFunction,
-        send: SendFunction,
+        scope: Scope,
+        receive: ASGIReceiveCallable,
+        send: ASGISendCallable,
     ) -> None:
         nonlocal shutdown_seen
         assert scope["type"] == "lifespan"
@@ -208,9 +208,9 @@ async def test_lifespan_shutdown_failed() -> None:
     shutdown_seen = False
 
     async def app(
-        scope: EventOrScope,
-        receive: ReceiveFunction,
-        send: SendFunction,
+        scope: Scope,
+        receive: ASGIReceiveCallable,
+        send: ASGISendCallable,
     ) -> None:
         nonlocal shutdown_seen
         assert scope["type"] == "lifespan"
@@ -276,9 +276,9 @@ async def test_lifespan_not_supported() -> None:
 
     # Create the application.
     async def app(
-        _scope: EventOrScope,
-        _receive: ReceiveFunction,
-        _send: SendFunction,
+        _scope: Scope,
+        _receive: ASGIReceiveCallable,
+        _send: ASGISendCallable,
     ) -> None:
         msg = "Lifespan protocol not supported"
         raise ValueError(msg)
@@ -346,9 +346,9 @@ async def test_lifespan_receive_after_shutdown() -> None:
     done = False
 
     async def app(
-        _scope: EventOrScope,
-        receive: ReceiveFunction,
-        send: SendFunction,
+        _scope: Scope,
+        receive: ASGIReceiveCallable,
+        send: ASGISendCallable,
     ) -> None:
         nonlocal done
         event = await receive()

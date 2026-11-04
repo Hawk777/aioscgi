@@ -7,8 +7,10 @@ from typing import TYPE_CHECKING, Never
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from asgi_types import ASGIReceiveEvent, ASGISendEvent, LifespanScope
+
     from .container import Container
-    from .types import Adapter, EventOrScope
+    from .types import Adapter
 
 
 @enum.unique
@@ -95,7 +97,7 @@ class _Manager:
 
         This method should be invoked in a separate task.
         """
-        scope: EventOrScope = {
+        scope: LifespanScope = {
             "type": "lifespan",
             "asgi": {
                 "version": "3.0",
@@ -133,14 +135,14 @@ class _Manager:
             if local_state is _State.STOPPING:
                 self._shutdown_complete(None)
 
-    async def _receive(self) -> EventOrScope:
+    async def _receive(self) -> ASGIReceiveEvent:
         """Receive the next lifespan event."""
         while True:
             ret = await self._try_receive()
             if ret is not None:
                 return ret
 
-    async def _try_receive(self) -> EventOrScope | None:
+    async def _try_receive(self) -> ASGIReceiveEvent | None:
         """
         Try to receive a lifespan event.
 
@@ -199,17 +201,13 @@ class _Manager:
                 msg = "Never future completed"
                 raise RuntimeError(msg)
 
-    async def _send(self, event: EventOrScope) -> None:
+    async def _send(self, event: ASGISendEvent) -> None:
         """
         Send a lifespan event.
 
         :param event: The event object.
         """
         event_type = event["type"]
-        if not isinstance(event_type, str):
-            msg = f"type key is of type {type(event_type)}, expected str"
-            raise TypeError(msg)
-
         if event_type.endswith(".complete"):
             error_message = None
         else:

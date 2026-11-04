@@ -2,7 +2,7 @@
 
 import wsgiref.headers
 from collections.abc import Coroutine
-from typing import override
+from typing import TYPE_CHECKING, cast, override
 from unittest.mock import MagicMock, _Call, call  # pyright: ignore [reportPrivateUsage]
 
 import pytest
@@ -12,7 +12,16 @@ import sioscgi.response
 from aioscgi.asyncio import _Adapter as MockAdapter  # pyright: ignore [reportPrivateUsage]
 from aioscgi.container import Container
 from aioscgi.http import run
-from aioscgi.types import EventOrScope, ReceiveFunction, SendFunction, Socket
+from aioscgi.types import Socket
+
+if TYPE_CHECKING:
+    from asgi_types import (
+        ASGIReceiveCallable,
+        ASGIReceiveEvent,
+        ASGISendCallable,
+        ASGISendEvent,
+        Scope,
+    )
 
 
 class EventMatcher:
@@ -120,8 +129,8 @@ def run_test(
     write_events: list[sioscgi.response.Event],
     expected_headers: list[tuple[bytes, bytes]],
     expected_environ: dict[str, bytes],
-    expected_messages: list[EventOrScope],
-    send_messages: list[EventOrScope],
+    expected_messages: list[ASGIReceiveEvent],
+    send_messages: list[ASGISendEvent],
     *,
     extra_reader_calls: list[_Call] | None = None,
     read_returns_eof: bool = False,
@@ -157,14 +166,10 @@ def run_test(
     """
 
     async def app(
-        scope: EventOrScope,
-        receive: ReceiveFunction,
-        send: SendFunction,
+        scope: Scope,
+        receive: ASGIReceiveCallable,
+        send: ASGISendCallable,
     ) -> None:
-        if scope["type"] == "lifespan":
-            msg = "Lifespan protocol not supported by this application"
-            raise ValueError(msg)
-
         assert scope["type"] == "http"
         assert isinstance(scope["asgi"], dict)
         assert scope["asgi"]["version"] == "3.0"
@@ -176,9 +181,9 @@ def run_test(
         assert scope["query_string"] == b""
         assert scope["headers"] == expected_headers
         assert scope["server"] == ("localhost", 80)
-        extensions = scope["extensions"]
+        extensions = scope.get("extensions")
         assert isinstance(extensions, dict)
-        environ: dict[str, bytes] = extensions["environ"]
+        environ = cast("dict[str, bytes]", extensions["environ"])
         assert environ == expected_environ
         if x_sendfile:
             assert extensions["http.response.pathsend"] == {}
@@ -251,7 +256,7 @@ def test_simple() -> None:
             "SERVER_NAME": b"localhost",
             "SERVER_PORT": b"80",
         },
-        [{"type": "http.request"}],
+        [{"type": "http.request", "body": b"", "more_body": False}],
         [
             {
                 "type": "http.response.start",
@@ -307,7 +312,7 @@ def test_multi_body() -> None:
         [
             {"type": "http.request", "body": b"abcd", "more_body": True},
             {"type": "http.request", "body": b"efgh", "more_body": True},
-            {"type": "http.request"},
+            {"type": "http.request", "body": b"", "more_body": False},
         ],
         [
             {
@@ -351,7 +356,7 @@ def test_disconnect_after_request() -> None:
             "SERVER_PORT": b"80",
         },
         [
-            {"type": "http.request"},
+            {"type": "http.request", "body": b"", "more_body": False},
             {"type": "http.disconnect"},
         ],
         [],
@@ -432,7 +437,7 @@ def test_https() -> None:
             "SERVER_PORT": b"80",
             "HTTPS": b"1",
         },
-        [{"type": "http.request"}],
+        [{"type": "http.request", "body": b"", "more_body": False}],
         [
             {
                 "type": "http.response.start",
@@ -480,14 +485,15 @@ def test_x_sendfile() -> None:
             "SERVER_NAME": b"localhost",
             "SERVER_PORT": b"80",
         },
-        [{"type": "http.request"}],
+        [{"type": "http.request", "body": b"", "more_body": False}],
         [
             {
                 "type": "http.response.start",
                 "status": 200,
                 "headers": [(b"content-type", b"text/plain; charset=UTF-8")],
             },
-            {"type": "http.response.pathsend", "path": "/foo/bar/baz.txt"},
+            # https://github.com/Kludex/asgi-types/issues/13
+            {"type": "http.response.pathsend", "path": "/foo/bar/baz.txt"},  # pyright: ignore [reportArgumentType]
         ],
         x_sendfile=True,
     )

@@ -21,6 +21,19 @@ The HTTP ``scope["client"]`` and ``scope["server"]`` entries are now both
 tuples, not lists. This is vague in the ASGI specification, and the
 ``asgi-types`` package suggests the use of tuples here.
 
+The HTTP ``scope["raw_path"]`` entry was previously of type ``str``. This is
+non-compliant with the ASGI specification. It is now of type ``bytes`` as
+required. Also, this entry could previously be present but have the value
+``None``; while the ASGI specification is vague (it claims that it is optional
+and “if missing defaults to ``None`` ”), leaving it out of the dictionary
+altogether seems cleaner and is in keeping with the ``asgi-types`` package.
+
+The HTTP ``event["headers"]`` entry in an event of type ``http.response.start``
+was previously mandatory (aioscgi would crash the application task if the
+application sent an event without that entry). That was non-compliant with the
+ASGI specification, which states that ``event["headers"]`` is optional. A
+missing entry is now accepted.
+
 Changes in 2.5.1
 ================
 

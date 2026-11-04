@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .types import ApplicationType
+    from asgi_types import ASGI3Application
 
 
 class Container:
@@ -21,14 +21,14 @@ class Container:
         "x_sendfile": "Whether to enable http.response.pathsend via X-Sendfile.",
     }
 
-    application: ApplicationType
+    application: ASGI3Application
     base_uri: str | None
-    state: dict[Any, Any]
+    state: dict[str, Any]
     x_sendfile: bool
 
     def __init__(
         self,
-        application: ApplicationType,
+        application: ASGI3Application,
         base_uri: str | None,
         *,
         x_sendfile: bool = False,

@@ -19,6 +19,7 @@ ci = [
     { name = "pylint-gitlab" },
 ]
 dev = [
+    { name = "asgi-types" },
     { name = "pylint" },
     { name = "pyright" },
     { name = "pytest" },
@@ -32,6 +33,7 @@ requires-dist = [{ name = "sioscgi", specifier = "~=5.0" }]
 [package.metadata.requires-dev]
 ci = [{ name = "pylint-gitlab" }]
 dev = [
+    { name = "asgi-types", specifier = "~=0.2.0" },
     { name = "pylint", specifier = "~=4.1.3" },
     { name = "pyright", specifier = "~=1.1.414" },
     { name = "pytest", specifier = "~=9.2.0" },
@@ -49,6 +51,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/64/08/ddad0d5398d0961d506b0489e737a06e29a963eff0f2f0a2bb2cfb36dd1f/anybadge-1.16.0.tar.gz", hash = "sha256:f4e95eca834482f9932f9020ac2fe04a5ca863728b446324a8d35b1e67faab71", size = 34616, upload-time = "2025-01-11T23:03:27.966Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/7d/01b2ac2fec808dea667b8678938156c3910219f2c45ee2e0b01e72786d72/anybadge-1.16.0-py3-none-any.whl", hash = "sha256:bc9ef2e20d875ee09237a15250a17b6fd7e67276f083d32a297963cdec179918", size = 28412, upload-time = "2025-01-11T23:03:24.857Z" },
+]
+
+[[package]]
+name = "asgi-types"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/98/cd/15c24137c074f2da0fa748209b943ee860fd8419c910a765bc02ea42aa21/asgi_types-0.2.0.tar.gz", hash = "sha256:f465db9a4e877ebe876e7e2334ec02d7740dd83a86d683f2f43f9ca786ce1fd8", size = 25477, upload-time = "2026-01-29T20:42:16.94Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4a/05/4d33b1ffbcf4f15457354bbd9567f4e86abf8ebf68dd975559b9f3cccb97/asgi_types-0.2.0-py3-none-any.whl", hash = "sha256:5f5bd59b20a6f52da35dfd68c09dd383e753e1b72d5b949047e3145447ffbb45", size = 3737, upload-time = "2026-01-29T20:42:15.89Z" },
 ]
 
 [[package]]

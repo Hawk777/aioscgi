@@ -6,7 +6,7 @@ import logging
 import urllib.parse
 import wsgiref.util
 from contextlib import AbstractAsyncContextManager, aclosing, closing
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import sioscgi.request
 import sioscgi.response
@@ -14,8 +14,15 @@ import sioscgi.response
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Mapping
 
+    from asgi_types import (
+        ASGIReceiveEvent,
+        ASGISendEvent,
+        HTTPResponseStartEvent,
+        HTTPScope,
+    )
+
     from .container import Container
-    from .types import Adapter, EventOrScope, Socket
+    from .types import Adapter, Socket
 
 
 class _ConnectionClosedError(BrokenPipeError):
@@ -183,7 +190,7 @@ def _decode_opt(raw: bytes | None) -> str | None:
 def _calc_paths(
     base_uri: str | None,
     environ: Mapping[str, bytes],
-) -> tuple[str, str, str | None] | None:
+) -> tuple[str, str, bytes | None] | None:
     """
     Calculate the three path entries for the scope.
 
@@ -193,19 +200,11 @@ def _calc_paths(
         computed.
     """
     # Grab the variables we expect to find useful.
-    request_uri_bytes = environ.get("REQUEST_URI")
+    request_uri = environ.get("REQUEST_URI")
     script_name_bytes = environ["SCRIPT_NAME"]
     path_info_bytes = environ.get("PATH_INFO")
 
     # UTF-8-decode them.
-    try:
-        request_uri = _decode_opt(request_uri_bytes)
-    except UnicodeDecodeError:
-        logging.getLogger(__name__).exception(
-            "REQUEST_URI %r is not valid UTF-8",
-            request_uri_bytes,
-        )
-        return None
     try:
         script_name = script_name_bytes.decode("UTF-8")
     except UnicodeDecodeError:
@@ -229,7 +228,7 @@ def _calc_paths(
     # have a raw_path because other variables are populated after URL-decoding (at least
     # of non-%2F bytes, and maybe all bytes) and therefore not “raw”.
     if request_uri is not None:
-        question_pos = request_uri.find("?")
+        question_pos = request_uri.find(b"?")
         raw_path = request_uri if question_pos == -1 else request_uri[:question_pos]
     else:
         raw_path = None
@@ -256,10 +255,7 @@ def _calc_paths(
     return (root_path, path, raw_path)
 
 
-def _make_scope(
-    container: Container,
-    environ: Mapping[str, bytes],
-) -> EventOrScope | None:
+def _make_scope(container: Container, environ: Mapping[str, bytes]) -> HTTPScope | None:
     """
     Convert a CGI/SCGI environment mapping into an ASGI HTTP scope dictionary.
 
@@ -298,8 +294,15 @@ def _make_scope(
         )
         return None
 
+    # Build the extensions dictionary.
+    extensions: dict[str, dict[object, object]] = {
+        # This is asgi-types’s type but it is too strict.
+        "environ": environ,  # pyright: ignore [reportAssignmentType]
+        **({"http.response.pathsend": {}} if container.x_sendfile else {}),
+    }
+
     # Build a scope dictionary.
-    return {
+    scope: HTTPScope = {
         "type": "http",
         "asgi": {
             "version": "3.0",
@@ -309,18 +312,22 @@ def _make_scope(
         "method": request_method_str.upper(),
         "scheme": _guess_scheme(environ),
         "path": path,
-        "raw_path": raw_path,
+        "raw_path": raw_path if raw_path is not None else b"",
         "query_string": environ["QUERY_STRING"],
         "root_path": root_path,
         "headers": _calc_http_headers(environ),
         "client": _calc_client(environ),
         "server": (server_name_str, int(environ["SERVER_PORT"])),
-        "extensions": {
-            "environ": environ,
-            **({"http.response.pathsend": {}} if container.x_sendfile else {}),
-        },
+        "extensions": extensions,
         "state": container.state,
     }
+    if raw_path is None:
+        # Workaround for <https://github.com/Kludex/asgi-types/issues/12>: asgi-types
+        # says raw_path is mandatory even though the specification says it is optional;
+        # to make the original assignment to scope pass type checking, always give it a
+        # value, and then delete it if we shouldn’t have.
+        del scope["raw_path"]  # pyright: ignore [reportGeneralTypeIssues]
+    return scope
 
 
 class _Connection:
@@ -405,7 +412,7 @@ class _Connection:
                 environ = event.environment
 
         # Build a scope dictionary.
-        scope: EventOrScope | None = _make_scope(self._container, environ)
+        scope = _make_scope(self._container, environ)
         if scope is None:
             return
 
@@ -446,7 +453,7 @@ class _Connection:
             self._reader.receive_data(chunk)
         return event
 
-    async def _receive_gen(self) -> AsyncGenerator[EventOrScope]:
+    async def _receive_gen(self) -> AsyncGenerator[ASGIReceiveEvent]:
         """
         Yield the events that the application should receive.
 
@@ -466,7 +473,7 @@ class _Connection:
                         "more_body": True,
                     }
                 else:
-                    yield {"type": "http.request"}
+                    yield {"type": "http.request", "body": b"", "more_body": False}
                     break
         except sioscgi.request.Error as exp:
             if isinstance(exp, sioscgi.request.RemotePrematureEOFError):
@@ -484,7 +491,7 @@ class _Connection:
         yield {"type": "http.disconnect"}
         raise _ReceiveAfterDisconnectError
 
-    async def _receive(self, gen: AsyncGenerator[EventOrScope]) -> EventOrScope:
+    async def _receive(self, gen: AsyncGenerator[ASGIReceiveEvent]) -> ASGIReceiveEvent:
         """
         Receive the next event from the SCGI client to the application.
 
@@ -509,7 +516,7 @@ class _Connection:
             self._socket.write_chunk(raw)
 
     @staticmethod
-    def _send_unpack_start(event: EventOrScope) -> tuple[int, list[tuple[str, str]]]:
+    def _send_unpack_start(event: ASGISendEvent) -> tuple[int, list[tuple[str, str]]]:
         """
         Check and unpack an event of type “http.response.start”.
 
@@ -521,14 +528,12 @@ class _Connection:
         if event_type != "http.response.start":
             msg = f"App sent event “{event_type}”, expected “http.response.start”"
             raise ValueError(msg)
+        event = cast("HTTPResponseStartEvent", event)
         if event.get("trailers", False):
             msg = "trailers are not supported via SCGI"
             raise ValueError(msg)
         status_code = event["status"]
-        if not isinstance(status_code, int):
-            msg = f"status key is of type {type(status_code)}, expected int"
-            raise TypeError(msg)
-        app_headers = event["headers"]
+        app_headers = event.get("headers", [])
         if not isinstance(app_headers, list):
             msg = f"headers key is of type {type(app_headers)}, expected list"
             raise TypeError(msg)
@@ -540,7 +545,7 @@ class _Connection:
         headers = [(k, v) for k, v in str_headers if k.lower() != "transfer-encoding"]
         return (status_code, headers)
 
-    def _send_gen(self) -> Generator[None, EventOrScope]:
+    def _send_gen(self) -> Generator[None, ASGISendEvent]:
         """
         Accept events from the application sent to the framework.
 
@@ -570,7 +575,8 @@ class _Connection:
                 )
                 more = event.get("more_body", False)
 
-            case "http.response.pathsend":
+            # https://github.com/Kludex/asgi-types/issues/13
+            case "http.response.pathsend":  # pyright: ignore [reportUnnecessaryComparison]
                 if not self._container.x_sendfile:
                     msg = (
                         "App sent event “http.response.pathsend”, but pathsend "
@@ -633,8 +639,8 @@ class _Connection:
 
     async def _send(
         self,
-        gen: Generator[None, EventOrScope],
-        event: EventOrScope,
+        gen: Generator[None, ASGISendEvent],
+        event: ASGISendEvent,
     ) -> None:
         """
         Send the next event from the application to the SCGI client.

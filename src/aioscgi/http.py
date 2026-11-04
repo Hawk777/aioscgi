@@ -94,7 +94,7 @@ def _calc_http_version(server_protocol: bytes) -> str:
     raise ValueError(msg)
 
 
-def _guess_scheme(environ: dict[str, bytes]) -> str:
+def _guess_scheme(environ: Mapping[str, bytes]) -> str:
     """
     Guess the URL scheme (http or https).
 
@@ -111,7 +111,7 @@ def _guess_scheme(environ: dict[str, bytes]) -> str:
     return wsgiref.util.guess_scheme({"HTTPS": https.decode("ISO-8859-1")})
 
 
-def _calc_http_headers(environ: dict[str, bytes]) -> list[tuple[bytes, bytes]]:
+def _calc_http_headers(environ: Mapping[str, bytes]) -> list[tuple[bytes, bytes]]:
     """
     Extract the HTTP headers from the environment dictionary.
 
@@ -130,7 +130,7 @@ def _calc_http_headers(environ: dict[str, bytes]) -> list[tuple[bytes, bytes]]:
     ]
 
 
-def _calc_client(environ: dict[str, bytes]) -> tuple[str, int] | None:
+def _calc_client(environ: Mapping[str, bytes]) -> tuple[str, int] | None:
     """
     Generate the ``client`` key for the ASGI scope.
 

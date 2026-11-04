@@ -6,7 +6,7 @@ import logging
 import urllib.parse
 import wsgiref.util
 from contextlib import AbstractAsyncContextManager, aclosing, closing
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import sioscgi.request
 import sioscgi.response
@@ -130,7 +130,7 @@ def _calc_http_headers(environ: dict[str, bytes]) -> list[tuple[bytes, bytes]]:
     ]
 
 
-def _calc_client(environ: dict[str, bytes]) -> list[Any] | None:
+def _calc_client(environ: dict[str, bytes]) -> tuple[str, int] | None:
     """
     Generate the ``client`` key for the ASGI scope.
 
@@ -142,7 +142,7 @@ def _calc_client(environ: dict[str, bytes]) -> list[Any] | None:
     port = environ.get("REMOTE_PORT")  # Nonstandard, but may exist
     if addr is not None and port is not None:
         try:
-            return [addr.decode("UTF-8"), int(port)]
+            return (addr.decode("UTF-8"), int(port))
         except UnicodeDecodeError:
             logging.getLogger(__name__).exception(
                 "REMOTE_ADDR %s is not valid UTF-8",
@@ -314,7 +314,7 @@ def _make_scope(
         "root_path": root_path,
         "headers": _calc_http_headers(environ),
         "client": _calc_client(environ),
-        "server": [server_name_str, int(environ["SERVER_PORT"])],
+        "server": (server_name_str, int(environ["SERVER_PORT"])),
         "extensions": {
             "environ": environ,
             **({"http.response.pathsend": {}} if container.x_sendfile else {}),

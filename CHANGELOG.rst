@@ -13,6 +13,10 @@ A bug in constructing an exception message if a ``lifespan.startup.failed`` or
 ``lifespan.shutdown.failed`` event had a ``message`` key with a non-string
 value has been fixed.
 
+The HTTP ``scope["headers"]`` entry is now a list of tuples, not a list of
+lists. This is vague in the ASGI specification, and the ``asgi-types`` package
+suggests the use of tuples here.
+
 Changes in 2.5.1
 ================
 

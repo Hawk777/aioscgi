@@ -5,7 +5,13 @@ import http
 import logging
 import urllib.parse
 import wsgiref.util
-from contextlib import AbstractAsyncContextManager, aclosing, closing, suppress
+from contextlib import (
+    AbstractAsyncContextManager,
+    aclosing,
+    asynccontextmanager,
+    closing,
+    suppress,
+)
 from typing import TYPE_CHECKING, cast
 
 import sioscgi.request
@@ -15,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Mapping
 
     from asgi_types import (
+        ASGIReceiveCallable,
         ASGIReceiveEvent,
         ASGISendEvent,
         HTTPResponseStartEvent,
@@ -330,61 +337,52 @@ def _make_scope(container: Container, environ: Mapping[str, bytes]) -> HTTPScope
     return scope
 
 
-class _Connection:
-    """
-    The handler for one accepted connection.
-
-    Each time the I/O adapter accepts a new incoming connection, it must create a new
-    instance of an I/O-adapter-specific subclass of this class (in a common task or in a
-    dedicated per-connection task) and then await the object’s run method (in a
-    dedicated per-connection task).
-    """
+class _Receiver:
+    """The receive half of an HTTP connection."""
 
     __slots__ = {
         "_container": "The ASGI container.",
-        "_disconnected_set": "A callable that sets the disconnected event.",
         "_disconnected_wait": "A callable that waits for the disconnected event.",
+        "_mutex": "A mutex held by the task calling _receive.",
         "_read_error": "The error that previously occurred while reading, if any.",
         "_reader": "The SCGI protocol request state machine.",
-        "_reader_mutex": "A mutex held by the task calling _receive.",
         "_socket": "The socket.",
-        "_write_error": "The error that previously occurred while writing, if any.",
-        "_writer": "The SCGI protocol response state machine.",
     }
 
     _container: Container
-    _disconnected_set: Callable[[], None]
     _disconnected_wait: Callable[[], Awaitable[None]]
+    _mutex: AbstractAsyncContextManager[None]
     _read_error: Exception | None
     _reader: sioscgi.request.SCGIReader
-    _reader_mutex: AbstractAsyncContextManager[None]
     _socket: Socket
-    _write_error: Exception | None
-    _writer: sioscgi.response.SCGIWriter
 
-    def __init__(self, container: Container, adapter: Adapter, socket: Socket) -> None:
+    def __init__(
+        self,
+        container: Container,
+        adapter: Adapter,
+        socket: Socket,
+        disconnected_wait: Callable[[], Awaitable[None]],
+    ) -> None:
         """
-        Construct a new _Connection.
+        Construct a new _Receiver.
 
         :param container: The ASGI container.
         :param adapter: The I/O adapter.
         :param socket: The incoming connected socket.
+        :param disconnected_wait: A callable that waits for the disconnected event.
         """
         self._container = container
-        (self._disconnected_set, self._disconnected_wait) = adapter.create_event()
+        self._disconnected_wait = disconnected_wait
+        self._mutex = adapter.create_mutex()
         self._read_error = None
         self._reader = sioscgi.request.SCGIReader()
-        self._reader_mutex = adapter.create_mutex()
         self._socket = socket
-        self._write_error = None
-        self._writer = sioscgi.response.SCGIWriter()
 
-    async def run(self) -> None:
+    async def receive_scope(self) -> HTTPScope | None:
         """
-        Run the application.
+        Receive data until enough is available to create the scope.
 
-        The caller is expected to close the connection to the SCGI client after this
-        function returns.
+        :return: The scope, or None if the connection was closed too early.
         """
         # Receive the request line and headers from the SCGI client.
         environ: dict[str, bytes] | None = None
@@ -393,18 +391,18 @@ class _Connection:
                 event = self._reader.next_event()
             except sioscgi.request.Error:
                 logging.getLogger(__name__).exception("SCGI remote protocol error")
-                return
+                return None
             if event is None:
                 try:
                     chunk = await self._socket.read_chunk()
                 except ConnectionResetError:
                     # RST before headers are finished. Abandon the request.
-                    return
+                    return None
                 if chunk:
                     self._reader.receive_data(chunk)
                 else:
                     # EOF before headers are finished. Abandon the request.
-                    return
+                    return None
             else:
                 # Got a complete event. The first received event should be the request
                 # headers.
@@ -412,29 +410,18 @@ class _Connection:
                 environ = event.environment
 
         # Build a scope dictionary.
-        scope = _make_scope(self._container, environ)
-        if scope is None:
-            return
+        return _make_scope(self._container, environ)
 
-        # Run the application.
-        with closing(self._send_gen()) as send_gen:
-            next(send_gen)  # Advance to the first yield expression.
-            async with aclosing(self._receive_gen()) as receive_gen:
-                logging.getLogger(__name__).debug(
-                    "Starting application with scope %s",
-                    scope,
-                )
-                try:
-                    with suppress(_ConnectionClosedError):
-                        await self._container.application(
-                            scope,
-                            functools.partial(self._receive, receive_gen),
-                            functools.partial(self._send, send_gen),
-                        )
-                except Exception:  # pylint: disable=broad-except
-                    logging.getLogger(__name__).exception(
-                        "Uncaught exception in application callable",
-                    )
+    @asynccontextmanager
+    async def receive_callable(self) -> AsyncGenerator[ASGIReceiveCallable]:
+        """
+        Construct an ASGI receive callable backed by this _Receiver.
+
+        :return: The callable.
+        """
+        gen = self._receive_gen()
+        async with aclosing(gen):
+            yield functools.partial(self._receive, gen)
 
     async def _receive_next_event(self) -> sioscgi.request.Event:
         """
@@ -496,7 +483,7 @@ class _Connection:
 
         :param gen: The generator that yields events.
         """
-        async with self._reader_mutex:
+        async with self._mutex:
             if self._read_error is not None:
                 raise self._read_error
             try:
@@ -506,6 +493,80 @@ class _Connection:
             except Exception as exp:
                 self._read_error = exp
                 raise
+
+
+class _Connection:
+    """
+    The handler for one accepted connection.
+
+    Each time the I/O adapter accepts a new incoming connection, it must create a new
+    instance of an I/O-adapter-specific subclass of this class (in a common task or in a
+    dedicated per-connection task) and then await the object’s run method (in a
+    dedicated per-connection task).
+    """
+
+    __slots__ = {
+        "_container": "The ASGI container.",
+        "_disconnected_set": "A callable that sets the disconnected event.",
+        "_receiver": "The receive half of the protocol.",
+        "_socket": "The socket.",
+        "_write_error": "The error that previously occurred while writing, if any.",
+        "_writer": "The SCGI protocol response state machine.",
+    }
+
+    _container: Container
+    _disconnected_set: Callable[[], None]
+    _receiver: _Receiver
+    _socket: Socket
+    _write_error: Exception | None
+    _writer: sioscgi.response.SCGIWriter
+
+    def __init__(self, container: Container, adapter: Adapter, socket: Socket) -> None:
+        """
+        Construct a new _Connection.
+
+        :param container: The ASGI container.
+        :param adapter: The I/O adapter.
+        :param socket: The incoming connected socket.
+        """
+        self._container = container
+        (self._disconnected_set, disconnected_wait) = adapter.create_event()
+        self._receiver = _Receiver(container, adapter, socket, disconnected_wait)
+        self._socket = socket
+        self._write_error = None
+        self._writer = sioscgi.response.SCGIWriter()
+
+    async def run(self) -> None:
+        """
+        Run the application.
+
+        The caller is expected to close the connection to the SCGI client after this
+        function returns.
+        """
+        # Get the scope.
+        scope = await self._receiver.receive_scope()
+        if scope is None:
+            return
+
+        # Run the application.
+        with closing(self._send_gen()) as send_gen:
+            next(send_gen)  # Advance to the first yield expression.
+            async with self._receiver.receive_callable() as receive:
+                logging.getLogger(__name__).debug(
+                    "Starting application with scope %s",
+                    scope,
+                )
+                try:
+                    with suppress(_ConnectionClosedError):
+                        await self._container.application(
+                            scope,
+                            receive,
+                            functools.partial(self._send, send_gen),
+                        )
+                except Exception:  # pylint: disable=broad-except
+                    logging.getLogger(__name__).exception(
+                        "Uncaught exception in application callable",
+                    )
 
     def _send_events(self, *events: sioscgi.response.Event) -> None:
         """Send one or more events to the SCGI client."""

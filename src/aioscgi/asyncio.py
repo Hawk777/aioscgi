@@ -7,7 +7,6 @@ import io
 import logging
 import signal
 import socket
-import sys
 from contextlib import AbstractAsyncContextManager
 from typing import TYPE_CHECKING, Never, override
 
@@ -528,26 +527,6 @@ async def _start_servers_gen(
         servers.
     :return: The started servers.
     """
-    # Python 3.13 added the cleanup_socket parameter to create_unix_server (and, albeit
-    # undocumented, therefore to start_unix_server as well), and defaulted it to True,
-    # which is bad for sockets passed in from an outside source.
-    python_313 = 0x030D00F0
-    if sys.hexversion >= python_313:
-
-        async def start_unix_server_from_socket(sock: socket.socket) -> asyncio.Server:
-            return await asyncio.start_unix_server(
-                handle_connection,
-                sock=sock,
-                cleanup_socket=False,
-            )
-    else:
-
-        async def start_unix_server_from_socket(sock: socket.socket) -> asyncio.Server:
-            return await asyncio.start_unix_server(
-                handle_connection,
-                sock=sock,
-            )
-
     for extra_socket in extra_sockets:
         if extra_socket.type != socket.SOCK_STREAM:
             msg = f"External socket is type {extra_socket.type}, SOCK_STREAM required"
@@ -555,7 +534,11 @@ async def _start_servers_gen(
         if extra_socket.family in {socket.AF_INET, socket.AF_INET6}:
             yield await asyncio.start_server(handle_connection, sock=extra_socket)
         elif extra_socket.family == socket.AF_UNIX:
-            yield await start_unix_server_from_socket(extra_socket)
+            yield await asyncio.start_unix_server(
+                handle_connection,
+                sock=extra_socket,
+                cleanup_socket=False,
+            )
         else:
             msg = f"Unrecognized external socket family {extra_socket.family}"
             raise ValueError(msg)

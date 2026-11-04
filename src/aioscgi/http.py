@@ -5,7 +5,7 @@ import http
 import logging
 import urllib.parse
 import wsgiref.util
-from contextlib import AbstractAsyncContextManager, aclosing, closing
+from contextlib import AbstractAsyncContextManager, aclosing, closing, suppress
 from typing import TYPE_CHECKING, cast
 
 import sioscgi.request
@@ -425,13 +425,12 @@ class _Connection:
                     scope,
                 )
                 try:
-                    await self._container.application(
-                        scope,
-                        functools.partial(self._receive, receive_gen),
-                        functools.partial(self._send, send_gen),
-                    )
-                except _ConnectionClosedError:
-                    pass
+                    with suppress(_ConnectionClosedError):
+                        await self._container.application(
+                            scope,
+                            functools.partial(self._receive, receive_gen),
+                            functools.partial(self._send, send_gen),
+                        )
                 except Exception:  # pylint: disable=broad-except
                     logging.getLogger(__name__).exception(
                         "Uncaught exception in application callable",

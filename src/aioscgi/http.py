@@ -10,6 +10,7 @@ from contextlib import (
     aclosing,
     asynccontextmanager,
     closing,
+    contextmanager,
     suppress,
 )
 from typing import TYPE_CHECKING, cast
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     from asgi_types import (
         ASGIReceiveCallable,
         ASGIReceiveEvent,
+        ASGISendCallable,
         ASGISendEvent,
         HTTPResponseStartEvent,
         HTTPScope,
@@ -412,17 +414,6 @@ class _Receiver:
         # Build a scope dictionary.
         return _make_scope(self._container, environ)
 
-    @asynccontextmanager
-    async def receive_callable(self) -> AsyncGenerator[ASGIReceiveCallable]:
-        """
-        Construct an ASGI receive callable backed by this _Receiver.
-
-        :return: The callable.
-        """
-        gen = self._receive_gen()
-        async with aclosing(gen):
-            yield functools.partial(self._receive, gen)
-
     async def _receive_next_event(self) -> sioscgi.request.Event:
         """
         Receive the next sioscgi event.
@@ -494,21 +485,24 @@ class _Receiver:
                 self._read_error = exp
                 raise
 
+    @asynccontextmanager
+    async def receive_callable(self) -> AsyncGenerator[ASGIReceiveCallable]:
+        """
+        Construct an ASGI receive callable backed by this _Receiver.
 
-class _Connection:
-    """
-    The handler for one accepted connection.
+        :return: The callable.
+        """
+        gen = self._receive_gen()
+        async with aclosing(gen):
+            yield functools.partial(self._receive, gen)
 
-    Each time the I/O adapter accepts a new incoming connection, it must create a new
-    instance of an I/O-adapter-specific subclass of this class (in a common task or in a
-    dedicated per-connection task) and then await the object’s run method (in a
-    dedicated per-connection task).
-    """
+
+class _Sender:
+    """The send half of an HTTP connection."""
 
     __slots__ = {
         "_container": "The ASGI container.",
         "_disconnected_set": "A callable that sets the disconnected event.",
-        "_receiver": "The receive half of the protocol.",
         "_socket": "The socket.",
         "_write_error": "The error that previously occurred while writing, if any.",
         "_writer": "The SCGI protocol response state machine.",
@@ -516,57 +510,29 @@ class _Connection:
 
     _container: Container
     _disconnected_set: Callable[[], None]
-    _receiver: _Receiver
     _socket: Socket
     _write_error: Exception | None
     _writer: sioscgi.response.SCGIWriter
 
-    def __init__(self, container: Container, adapter: Adapter, socket: Socket) -> None:
+    def __init__(
+        self,
+        container: Container,
+        socket: Socket,
+        disconnected_set: Callable[[], None],
+    ) -> None:
         """
-        Construct a new _Connection.
+        Construct a new _Sender.
 
         :param container: The ASGI container.
         :param adapter: The I/O adapter.
         :param socket: The incoming connected socket.
+        :param disconnected_set: A callable that sets the disconnected event.
         """
         self._container = container
-        (self._disconnected_set, disconnected_wait) = adapter.create_event()
-        self._receiver = _Receiver(container, adapter, socket, disconnected_wait)
+        self._disconnected_set = disconnected_set
         self._socket = socket
         self._write_error = None
         self._writer = sioscgi.response.SCGIWriter()
-
-    async def run(self) -> None:
-        """
-        Run the application.
-
-        The caller is expected to close the connection to the SCGI client after this
-        function returns.
-        """
-        # Get the scope.
-        scope = await self._receiver.receive_scope()
-        if scope is None:
-            return
-
-        # Run the application.
-        with closing(self._send_gen()) as send_gen:
-            next(send_gen)  # Advance to the first yield expression.
-            async with self._receiver.receive_callable() as receive:
-                logging.getLogger(__name__).debug(
-                    "Starting application with scope %s",
-                    scope,
-                )
-                try:
-                    with suppress(_ConnectionClosedError):
-                        await self._container.application(
-                            scope,
-                            receive,
-                            functools.partial(self._send, send_gen),
-                        )
-                except Exception:  # pylint: disable=broad-except
-                    logging.getLogger(__name__).exception(
-                        "Uncaught exception in application callable",
-                    )
 
     def _send_events(self, *events: sioscgi.response.Event) -> None:
         """Send one or more events to the SCGI client."""
@@ -723,6 +689,83 @@ class _Connection:
                 self._write_error = exp
             self._disconnected_set()
             raise
+
+    @contextmanager
+    def send_callable(self) -> Generator[ASGISendCallable]:
+        """
+        Construct an ASGI send callable backed by this _Sender.
+
+        :return: The callable.
+        """
+        gen = self._send_gen()
+        with closing(gen):
+            try:
+                next(gen)  # Advance to the first yield expression.
+            except StopIteration as exp:
+                msg = "This should never happen"
+                raise RuntimeError(msg) from exp
+            yield functools.partial(self._send, gen)
+
+
+class _Connection:
+    """
+    The handler for one accepted connection.
+
+    Each time the I/O adapter accepts a new incoming connection, it must create a new
+    instance of an I/O-adapter-specific subclass of this class (in a common task or in a
+    dedicated per-connection task) and then await the object’s run method (in a
+    dedicated per-connection task).
+    """
+
+    __slots__ = {
+        "_container": "The ASGI container.",
+        "_receiver": "The receive half of the protocol.",
+        "_sender": "The send half of the protocol.",
+    }
+
+    _container: Container
+    _receiver: _Receiver
+    _sender: _Sender
+
+    def __init__(self, container: Container, adapter: Adapter, socket: Socket) -> None:
+        """
+        Construct a new _Connection.
+
+        :param container: The ASGI container.
+        :param adapter: The I/O adapter.
+        :param socket: The incoming connected socket.
+        """
+        self._container = container
+        (disconnected_set, disconnected_wait) = adapter.create_event()
+        self._receiver = _Receiver(container, adapter, socket, disconnected_wait)
+        self._sender = _Sender(container, socket, disconnected_set)
+
+    async def run(self) -> None:
+        """
+        Run the application.
+
+        The caller is expected to close the connection to the SCGI client after this
+        function returns.
+        """
+        # Get the scope.
+        scope = await self._receiver.receive_scope()
+        if scope is None:
+            return
+
+        # Run the application.
+        with self._sender.send_callable() as send:
+            async with self._receiver.receive_callable() as receive:
+                logging.getLogger(__name__).debug(
+                    "Starting application with scope %s",
+                    scope,
+                )
+                try:
+                    with suppress(_ConnectionClosedError):
+                        await self._container.application(scope, receive, send)
+                except Exception:  # pylint: disable=broad-except
+                    logging.getLogger(__name__).exception(
+                        "Uncaught exception in application callable",
+                    )
 
 
 async def run(container: Container, adapter: Adapter, socket: Socket) -> None:

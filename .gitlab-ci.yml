@@ -1,7 +1,7 @@
 variables:
-  NPM_CACHE_DIR: .npm-cache
   UV_CACHE_DIR: .uv-cache
   UV_LINK_MODE: copy
+  YARN_GLOBAL_FOLDER: .yarn-cache
 
 default:
   interruptible: true
@@ -9,13 +9,39 @@ default:
 .node:
   cache:
     key:
-      prefix: npm
+      prefix: corepack-and-yarn
       files:
-        - package-lock.json
+        - package.json
+        - yarn.lock
     paths:
-      - $NPM_CACHE_DIR
+      - .corepack-cache
+      - $YARN_GLOBAL_FOLDER
   image:
-    name: node:slim
+    name: node:26-slim
+  before_script:
+    # We need the Corepack cache to be in ./.corepack-cache so it can be cached
+    # as a GitLab CI cache—that is only willing to cache things inside the
+    # working directory. However, Corepack is going to put Yarn inside that
+    # directory and run it from there. If it does so, then our own package’s
+    # package.json will be the nearest ancestor of the Yarn executable, and so
+    # will be consulted for the settings to apply *to the Yarn executable*,
+    # which is completely inappropriate (in particular type: module completely
+    # breaks Yarn). Therefore, rather than using the corepack cache in place,
+    # we move it from inside the working directory to its default location
+    # (~/.cache/node/corepack) here, before using it, and then move it back
+    # afterwards so it can be cached.
+    - "[[ -d .corepack-cache ]] && mkdir -p ${HOME}/.cache/node && mv .corepack-cache ${HOME}/.cache/node/corepack"
+    # Corepack isn’t shipped as part of Node, so it has to be installed via
+    # NPM.
+    - npm --global install corepack
+    # Install Yarn.
+    - corepack install
+    # Install the actual dependencies.
+    - yarn install --immutable
+  after_script:
+    # Move the Corepack cache back to ./.corepack-cache so it can be picked up
+    # by GitLab CI.
+    - "mv ${HOME}/.cache/node/corepack .corepack-cache"
 
 .uv:
   image: ghcr.io/astral-sh/uv:0.13-python3.14-trixie
@@ -66,8 +92,7 @@ Pyright to GitLab:
   needs: [Pyright]
   when: always
   script:
-    - npm --cache=$NPM_CACHE_DIR ci
-    - npm --cache=$NPM_CACHE_DIR exec -- pyright-to-gitlab-ci --src=pyright.json --output=pyright-gitlab.json --base_path=.
+    - yarn exec pyright-to-gitlab-ci --src=pyright.json --output=pyright-gitlab.json --base_path=.
   artifacts:
     reports:
       codequality:

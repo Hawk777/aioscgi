@@ -17,7 +17,7 @@ dev = [
 
 [project]
 name = "aioscgi"
-version = "2.5.1"
+version = "2.5.2"
 dependencies = [
 	"sioscgi ~= 5.0",
 ]
